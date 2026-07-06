@@ -1,0 +1,7 @@
+# Core scientific stack
+numpy>=1.24
+pandas>=2.2
+matplotlib>=3.7
+
+# Optional: only needed for live market data (`python run_analysis.py --live`)
+yfinance>=0.2
