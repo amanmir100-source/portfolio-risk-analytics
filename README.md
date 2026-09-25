@@ -9,7 +9,7 @@
 
 An end-to-end risk analytics pipeline for a multi-asset ETF portfolio, built with **SQL (SQLite)** and **Python (NumPy / pandas / matplotlib)** — no black-box libraries. Market data flows into a relational database, gets shaped by analytical SQL (window functions, CTEs), and is then priced for risk by a vectorised Python engine: VaR/CVaR three ways, Monte Carlo simulation, and a closed-form Markowitz efficient frontier.
 
-![Growth of $10,000](reports/figures/01_cumulative_growth.png)
+![Growth of $10,000, real market data](reports/live/figures/01_cumulative_growth.png)
 
 ## Pipeline
 
@@ -37,10 +37,31 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance
 | **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR, expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
-| **Testing** | [`tests/`](tests/) | 29 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Testing** | [`tests/`](tests/) | 30 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
-## Key results (demo dataset, 5 years daily)
+## Key results: real market data
+
+Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 trading days), pulled 25 Sep 2026. Reproduce with `python run_analysis.py --live`; outputs land in [`reports/live/`](reports/live/).
+
+| Metric | Portfolio |
+|---|---|
+| Annualised return | **7.9%** |
+| Annualised volatility | **13.0%** (vs 17.5% weighted average of holdings: diversification saves ~4.5 pts) |
+| Sharpe / Sortino | **0.46 / 0.66** |
+| Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together) |
+| Daily VaR / CVaR (95%) | **1.28% / 1.82%** |
+| Daily VaR (99%): historical vs parametric | **2.08% vs 1.87%** |
+| 1-year Monte Carlo VaR (95%, $100k) | **$12,713** |
+| P(loss) over 1 year | **28.0%** |
+
+**Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
+
+Full per-asset table: [`reports/live/summary_metrics.csv`](reports/live/summary_metrics.csv) · SQL query outputs: [`reports/live/sql/`](reports/live/sql/)
+
+### Demo dataset (synthetic, reproducible)
+
+The default run uses a seeded synthetic dataset, so the pipeline runs anywhere, offline, with identical output. This is what CI tests.
 
 | Metric | Portfolio |
 |---|---|
@@ -85,13 +106,15 @@ Every query is unit-tested against an independent pandas implementation of the s
 
 ## Gallery
 
+Charts from the real-data run. The demo run produces the same set in [`reports/figures/`](reports/figures/).
+
 | | |
 |---|---|
-| ![Correlation](reports/figures/02_correlation_heatmap.png) | ![Rolling vol](reports/figures/03_rolling_volatility_sql.png) |
-| ![Drawdown](reports/figures/04_portfolio_drawdown.png) | ![VaR distribution](reports/figures/05_return_distribution_var.png) |
-| ![Monte Carlo](reports/figures/06_monte_carlo.png) | ![Frontier](reports/figures/07_efficient_frontier.png) |
+| ![Correlation](reports/live/figures/02_correlation_heatmap.png) | ![Rolling vol](reports/live/figures/03_rolling_volatility_sql.png) |
+| ![Drawdown](reports/live/figures/04_portfolio_drawdown.png) | ![VaR distribution](reports/live/figures/05_return_distribution_var.png) |
+| ![Monte Carlo](reports/live/figures/06_monte_carlo.png) | ![Frontier](reports/live/figures/07_efficient_frontier.png) |
 
-![Monthly heatmap](reports/figures/08_monthly_returns_heatmap.png)
+![Monthly heatmap](reports/live/figures/08_monthly_returns_heatmap.png)
 
 ## Quickstart
 
@@ -101,7 +124,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~4s)
-pytest                           # 29 tests
+pytest                           # 30 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -121,9 +144,9 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── optimization.py          # closed-form Markowitz frontier
 │   └── visualization.py         # 8 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 29 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 30 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
-└── reports/                     # figures + CSV outputs
+└── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
 
 ## Methodology notes
@@ -136,7 +159,7 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 
 ## Disclaimer
 
-The bundled dataset is **synthetic demo data** produced by the seeded generator in this repo — ticker symbols are used for realism only and the series are not real market history. Run with `--live` for real data. This project is for educational/portfolio purposes and is not investment advice.
+The headline results and gallery use real Yahoo Finance data. The bundled dataset is **synthetic demo data** produced by the seeded generator in this repo; there, ticker symbols are used for realism only and the series are not real market history. This project is for educational/portfolio purposes and is not investment advice.
 
 ## License
 
