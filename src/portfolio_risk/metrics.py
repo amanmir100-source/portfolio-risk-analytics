@@ -37,8 +37,15 @@ def to_wide(prices_long: pd.DataFrame) -> pd.DataFrame:
 
 
 def daily_returns(wide_prices: pd.DataFrame) -> pd.DataFrame:
-    """Daily simple returns; first row (undefined) is dropped."""
-    return wide_prices.sort_index().pct_change().iloc[1:].dropna(how="any")
+    """Daily simple returns between consecutive dates where every asset has a close.
+
+    A date missing a close for any asset is dropped *before* differencing, so
+    every return spans the same interval for every asset. Uses an explicit
+    shift rather than pct_change(), whose gap-filling default differs across
+    pandas versions and would make results depend on the installed pandas.
+    """
+    prices = wide_prices.sort_index().dropna(how="any")
+    return (prices / prices.shift(1) - 1.0).iloc[1:]
 
 
 def portfolio_returns(
