@@ -66,8 +66,12 @@ def main() -> None:
     started = time.perf_counter()
     data_dir = REPO_ROOT / "data"
     db_path = data_dir / "portfolio.db"
-    figures_dir = REPO_ROOT / "reports" / "figures"
-    sql_out_dir = REPO_ROOT / "reports" / "sql"
+    # Live runs write to reports/live/ so they never overwrite the reproducible
+    # demo outputs that the README gallery and CI are built on.
+    reports_dir = REPO_ROOT / "reports" / "live" if args.live else REPO_ROOT / "reports"
+    figures_dir = reports_dir / "figures"
+    sql_out_dir = reports_dir / "sql"
+    out = reports_dir.relative_to(REPO_ROOT).as_posix()
 
     print("=" * 64)
     print("  PORTFOLIO RISK ANALYTICS PIPELINE")
@@ -91,17 +95,16 @@ def main() -> None:
     # ----------------------------------------------------------- sql analytics
     sql_results = database.run_all_analytics(db_path, out_dir=sql_out_dir)
     print(f"[3/6] SQL layer  : {len(sql_results)} analytical queries "
-          f"(window functions, CTEs) → reports/sql/*.csv")
+          f"(window functions, CTEs) → {out}/sql/*.csv")
 
     # ------------------------------------------------------------- risk engine
     wide = metrics.to_wide(prices)
     returns = metrics.daily_returns(wide)
     port_r = metrics.portfolio_returns(returns, config.PORTFOLIO_WEIGHTS)
     summary = metrics.summary_table(returns, config.PORTFOLIO_WEIGHTS)
-    reports_dir = REPO_ROOT / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     summary.round(4).to_csv(reports_dir / "summary_metrics.csv")
-    print(f"[4/6] Risk engine: metrics for {len(summary)} rows → reports/summary_metrics.csv")
+    print(f"[4/6] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
 
     # -------------------------------------------------------------- simulations
     mc = simulate_portfolio(returns, config.PORTFOLIO_WEIGHTS, n_sims=args.sims)
@@ -132,7 +135,7 @@ def main() -> None:
         visualization.plot_monthly_heatmap(port_r,
                                            figures_dir / "08_monthly_returns_heatmap.png"),
     ]
-    print(f"[6/6] Charts     : {len(charts)} figures → reports/figures/")
+    print(f"[6/6] Charts     : {len(charts)} figures → {out}/figures/")
 
     # ------------------------------------------------------------------ report
     print("\n" + "-" * 64)
@@ -152,7 +155,7 @@ def main() -> None:
     print(f"  Max-Sharpe (long-only) : "
           f"{{{', '.join(f'{t}: {float(v):.0%}' for t, v in top_weights.items())}}}")
 
-    print("\n  Full per-asset table (also in reports/summary_metrics.csv):\n")
+    print(f"\n  Full per-asset table (also in {out}/summary_metrics.csv):\n")
     display = summary.copy()
     pct_cols = ["weight", "ann_return", "ann_volatility", "max_drawdown",
                 "var_95_daily", "cvar_95_daily", "var_99_daily"]
