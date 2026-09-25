@@ -5,6 +5,8 @@
 ![Stack](https://img.shields.io/badge/stack-SQL%20%7C%20NumPy%20%7C%20pandas%20%7C%20matplotlib-14213d)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+**Built to answer one question: how much could this portfolio lose, and how confident can we be in that number?**
+
 An end-to-end risk analytics pipeline for a multi-asset ETF portfolio, built with **SQL (SQLite)** and **Python (NumPy / pandas / matplotlib)** — no black-box libraries. Market data flows into a relational database, gets shaped by analytical SQL (window functions, CTEs), and is then priced for risk by a vectorised Python engine: VaR/CVaR three ways, Monte Carlo simulation, and a closed-form Markowitz efficient frontier.
 
 ![Growth of $10,000](reports/figures/01_cumulative_growth.png)
