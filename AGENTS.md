@@ -14,7 +14,7 @@ pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
 python run_analysis.py             # full pipeline on the bundled demo dataset (~4s)
 python run_analysis.py --live      # real market data via yfinance
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 29 tests, ~2s
+pytest                             # 30 tests, ~2s
 ```
 
 ## Architecture map
@@ -47,7 +47,9 @@ Everything is seeded; tests must stay deterministic.
 
 - SQLite has no `STDDEV`: rolling vol derives Bessel-corrected stdev from
   AVG(r²) − AVG(r)² inside the window; keep the `MAX(..., 0.0)` guard.
-- `reports/figures/*.png` are committed (embedded in README); regenerate them
-  with `python run_analysis.py` after any change that shifts the numbers.
+- `reports/` (demo) and `reports/live/` (real data) are both committed. The
+  README headline and gallery embed `reports/live/`; regenerate with
+  `python run_analysis.py` and `--live` after any change that shifts the numbers,
+  then update the README figures and data window.
 - `data/portfolio.db` is disposable and gitignored; `data/demo_prices.csv` is
   the frozen source of truth for the demo.

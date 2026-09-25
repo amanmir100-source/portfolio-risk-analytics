@@ -1,0 +1,9 @@
+ticker,name,asset_class,portfolio_weight,n_days,total_return_pct,ann_volatility_pct,worst_day_pct,best_day_pct,avg_volume
+SPY,SPDR S&P 500 ETF,US Large-Cap Equity,0.25,1253,85.31,17.2,-5.85,10.5,74654700
+QQQ,Invesco Nasdaq-100 ETF,US Tech Equity,0.15,1253,106.18,23.02,-6.21,12.0,51034553
+TLT,iShares 20+ Yr Treasury Bond ETF,Long-Duration Treasuries,0.15,1253,-35.27,15.7,-3.42,3.85,31389373
+EFA,iShares MSCI EAFE ETF,Intl Developed Equity,0.1,1252,52.43,16.63,-6.6,7.72,18429017
+GLD,SPDR Gold Shares,Commodities (Gold),0.1,1253,139.36,18.83,-10.27,6.36,9001676
+LQD,iShares IG Corporate Bond ETF,Investment-Grade Credit,0.1,1252,-6.57,8.68,-2.31,3.35,24804275
+VNQ,Vanguard Real Estate ETF,US REITs,0.1,1252,6.17,18.9,-5.0,7.31,4459586
+IWM,iShares Russell 2000 ETF,US Small-Cap Equity,0.05,1253,32.32,22.39,-6.42,8.5,32031748
