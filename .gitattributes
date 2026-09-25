@@ -1,0 +1,3 @@
+# The walkthrough notebook is documentation, not the codebase. Keep it out of
+# GitHub's language bar so the repo is labelled by its Python and SQL.
+*.ipynb linguist-documentation
