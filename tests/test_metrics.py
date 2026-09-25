@@ -90,3 +90,16 @@ def test_summary_table_contains_all_assets_and_portfolio():
     assert list(table.index) == ["SPY", "TLT", "GLD", "PORTFOLIO"]
     assert table.loc["PORTFOLIO", "weight"] == 1.0
     assert table.loc["SPY", "beta_vs_SPY"] == pytest.approx(1.0)
+
+
+def test_daily_returns_drops_dates_with_a_missing_close():
+    # B has no close on day 2 (a data-feed gap). The day must be dropped for
+    # every asset, so the single return spans day 1 -> day 3 for both.
+    wide = pd.DataFrame(
+        {"A": [100.0, 110.0, 121.0], "B": [50.0, np.nan, 55.0]},
+        index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+    )
+    r = metrics.daily_returns(wide)
+    assert list(r.index) == [pd.Timestamp("2024-01-03")]
+    assert np.isclose(r.loc["2024-01-03", "A"], 0.21)
+    assert np.isclose(r.loc["2024-01-03", "B"], 0.10)
