@@ -24,7 +24,8 @@ def test_annualized_volatility_matches_definition():
 def test_sharpe_is_excess_return_over_vol():
     rng = np.random.default_rng(1)
     r = pd.Series(rng.normal(0.0005, 0.01, 750))
-    expected = (metrics.annualized_return(r) - 0.02) / metrics.annualized_volatility(r)
+    # textbook Sharpe: arithmetic mean x 252, not the compound return
+    expected = (r.mean() * 252 - 0.02) / metrics.annualized_volatility(r)
     assert metrics.sharpe_ratio(r, risk_free=0.02) == pytest.approx(expected)
 
 
