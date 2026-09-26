@@ -287,3 +287,39 @@ def plot_var_backtest(bt: BacktestResult, path: str | Path, confidence: float = 
     ax.set_ylabel("Daily return")
     ax.legend(loc="upper left", bbox_to_anchor=(0, -0.08), fontsize=9.5)
     return _save(fig, path)
+
+
+def plot_stress_scenarios(
+    scenarios: pd.DataFrame, weights: dict[str, float], path: str | Path
+) -> Path:
+    """Portfolio loss in each crisis, split into each asset's contribution."""
+    _apply_style()
+    w = pd.Series(weights, dtype=float)
+    w = w / w.sum()
+    contrib = scenarios[list(w.index)].mul(w, axis=1)
+    fig, ax = plt.subplots(figsize=(11, 4.8))
+    names = list(contrib.index)[::-1]  # first scenario at the top
+    y = np.arange(len(names))
+    left_neg = np.zeros(len(names))
+    left_pos = np.zeros(len(names))
+    for ticker in w.index:
+        vals = contrib.loc[names, ticker].to_numpy()
+        base = np.where(vals < 0, left_neg, left_pos)
+        ax.barh(y, vals, left=base, height=0.55, label=ticker,
+                color=_TICKER_COLORS.get(ticker, "#999999"), edgecolor="white", linewidth=0.6)
+        left_neg += np.minimum(vals, 0)
+        left_pos += np.maximum(vals, 0)
+    totals = scenarios.loc[names, "portfolio_return"].to_numpy()
+    ax.scatter(totals, y, marker="D", color="black", s=45, zorder=4, label="Portfolio")
+    for yi, total in zip(y, totals):
+        ax.annotate(f"{total:.1%}", (total, yi), xytext=(0, 14), textcoords="offset points",
+                    ha="center", fontsize=10.5, fontweight="bold")
+    labels = [f"{n}\n{scenarios.loc[n, 'start']} to {scenarios.loc[n, 'end']}" for n in names]
+    ax.set_yticks(y, labels)
+    ax.axvline(0, color="black", lw=0.8)
+    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+    ax.set_title("Stress test: today's portfolio replayed through past crises")
+    ax.set_xlabel("Contribution to portfolio return (weight x asset return)")
+    ax.legend(ncol=9, loc="upper left", bbox_to_anchor=(0, -0.16), fontsize=9)
+    ax.grid(axis="y", visible=False)
+    return _save(fig, path)
