@@ -350,3 +350,27 @@ def plot_mc_comparison(models: dict[str, MonteCarloResult], path: str | Path) ->
     ax.set_ylabel("Simulations")
     ax.legend(loc="upper right", fontsize=9.5)
     return _save(fig, path)
+
+
+def plot_risk_contributions(rc: pd.DataFrame, path: str | Path) -> Path:
+    """Each asset's weight next to its share of volatility and of tail loss."""
+    _apply_style()
+    data = rc.drop(index="TOTAL")
+    data = data[data["weight"] > 0].sort_values("vol_share")
+    fig, ax = plt.subplots(figsize=(11, 5.6))
+    y = np.arange(len(data))
+    h = 0.26
+    for offset, col, label, color in (
+        (h, "weight", "Weight", "#b8c2cc"),
+        (0, "vol_share", "Share of volatility", PORTFOLIO_COLOR),
+        (-h, "cvar_share", "Share of tail loss (95% CVaR)", RED),
+    ):
+        ax.barh(y + offset, data[col], height=h, color=color, label=label)
+    ax.set_yticks(y, data.index)
+    ax.axvline(0, color="black", lw=0.8)
+    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+    ax.set_title("Where the risk comes from: weight vs share of risk")
+    ax.set_xlabel("Share of portfolio total (negative = reduces risk)")
+    ax.legend(loc="lower right")
+    ax.grid(axis="y", visible=False)
+    return _save(fig, path)
