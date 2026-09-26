@@ -13,9 +13,12 @@ from . import config
 
 
 def fetch_live_prices(
-    tickers: list[str] | None = None, years: int = 5
+    tickers: list[str] | None = None, years: int = 5, start: str | None = None
 ) -> pd.DataFrame:
-    """Download daily adjusted closes + volume; return long-format DataFrame."""
+    """Download daily adjusted closes + volume; return long-format DataFrame.
+
+    Pulls the last `years` years, or everything from `start` (YYYY-MM-DD) if given.
+    """
     try:
         import yfinance as yf
     except ImportError as exc:  # pragma: no cover - depends on environment
@@ -27,7 +30,7 @@ def fetch_live_prices(
     tickers = tickers or config.TICKERS
     raw = yf.download(
         tickers=" ".join(tickers),
-        period=f"{years}y",
+        **({"start": start} if start else {"period": f"{years}y"}),
         interval="1d",
         auto_adjust=True,
         progress=False,

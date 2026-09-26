@@ -31,7 +31,8 @@ try:
 except ImportError:  # fallback: run straight from the repo without installing
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from portfolio_risk import backtest, config, data_generator, database, metrics, visualization
+from portfolio_risk import (backtest, config, data_generator, database, metrics, stress,
+                            visualization)
 from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import efficient_frontier_analysis
 
@@ -80,7 +81,7 @@ def main() -> None:
     # ------------------------------------------------------------------ data
     prices, source = load_prices(args, data_dir)
     tickers = sorted(prices["ticker"].unique())
-    print(f"[1/7] Data       : {source}")
+    print(f"[1/8] Data       : {source}")
     print(f"                 {len(prices):,} rows | {len(tickers)} tickers | "
           f"{prices['date'].min()} → {prices['date'].max()}")
 
@@ -89,12 +90,12 @@ def main() -> None:
         db_path, prices, data_generator.assets_frame(), data_generator.weights_frame()
     )
     counts = database.table_row_counts(db_path)
-    print(f"[2/7] SQLite     : {db_path.relative_to(REPO_ROOT)} loaded "
+    print(f"[2/8] SQLite     : {db_path.relative_to(REPO_ROOT)} loaded "
           f"({', '.join(f'{t}={n:,}' for t, n in counts.items())})")
 
     # ----------------------------------------------------------- sql analytics
     sql_results = database.run_all_analytics(db_path, out_dir=sql_out_dir)
-    print(f"[3/7] SQL layer  : {len(sql_results)} analytical queries "
+    print(f"[3/8] SQL layer  : {len(sql_results)} analytical queries "
           f"(window functions, CTEs) → {out}/sql/*.csv")
 
     # ------------------------------------------------------------- risk engine
@@ -104,19 +105,31 @@ def main() -> None:
     summary = metrics.summary_table(returns, config.PORTFOLIO_WEIGHTS)
     reports_dir.mkdir(parents=True, exist_ok=True)
     summary.round(4).to_csv(reports_dir / "summary_metrics.csv")
-    print(f"[4/7] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
+    print(f"[4/8] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
 
     # -------------------------------------------------------------- simulations
     mc = simulate_portfolio(returns, config.PORTFOLIO_WEIGHTS, n_sims=args.sims)
     frontier = efficient_frontier_analysis(returns, config.PORTFOLIO_WEIGHTS)
-    print(f"[5/7] Simulation : Monte Carlo {mc.n_sims:,} paths | "
+    print(f"[5/8] Simulation : Monte Carlo {mc.n_sims:,} paths | "
           f"frontier cloud 20,000 portfolios")
 
     # ------------------------------------------------------------- var backtest
     bt = backtest.backtest_var(port_r)
     bt.table.round(4).to_csv(reports_dir / "var_backtest.csv", index=False)
-    print(f"[6/7] Backtest   : VaR on {bt.table['test_days'].iloc[0]:,} out-of-sample days "
+    print(f"[6/8] Backtest   : VaR on {bt.table['test_days'].iloc[0]:,} out-of-sample days "
           f"({bt.window}-day window) → {out}/var_backtest.csv")
+
+    # ------------------------------------------------------------ stress tests
+    scenarios = None
+    if args.live:
+        from portfolio_risk.live_data import fetch_live_prices
+        history = metrics.to_wide(fetch_live_prices(start=stress.HISTORY_START))
+        scenarios = stress.run_scenarios(history, config.PORTFOLIO_WEIGHTS)
+        scenarios.round(4).to_csv(reports_dir / "stress_scenarios.csv")
+        print(f"[7/8] Stress     : {len(scenarios)} historical crises replayed "
+              f"→ {out}/stress_scenarios.csv")
+    else:
+        print("[7/8] Stress     : skipped (needs price history back to 2007; use --live)")
 
     # ------------------------------------------------------------------ charts
     port_summary = summary.loc["PORTFOLIO"]
@@ -142,7 +155,10 @@ def main() -> None:
                                            figures_dir / "08_monthly_returns_heatmap.png"),
         visualization.plot_var_backtest(bt, figures_dir / "09_var_backtest.png"),
     ]
-    print(f"[7/7] Charts     : {len(charts)} figures → {out}/figures/")
+    if scenarios is not None:
+        charts.append(visualization.plot_stress_scenarios(
+            scenarios, config.PORTFOLIO_WEIGHTS, figures_dir / "10_stress_scenarios.png"))
+    print(f"[8/8] Charts     : {len(charts)} figures → {out}/figures/")
 
     # ------------------------------------------------------------------ report
     print("\n" + "-" * 64)
@@ -166,6 +182,11 @@ def main() -> None:
     for row in bt.table.itertuples():
         print(f"    {row.method:<10} {row.confidence:.0%}: {row.actual_breaches:>3} breaches "
               f"vs {row.expected_breaches:>5.1f} expected | p = {row.p_value:.3f} → {row.result}")
+
+    if scenarios is not None:
+        print("\n  Stress scenarios (today's weights, held through the crisis):")
+        for name, row in scenarios.iterrows():
+            print(f"    {name:<22} {row['start']} → {row['end']}: {row['portfolio_return']:>7.1%}")
 
     print(f"\n  Full per-asset table (also in {out}/summary_metrics.csv):\n")
     display = summary.copy()
