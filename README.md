@@ -39,12 +39,13 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ hist
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
 | **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
-| **Testing** | [`tests/`](tests/) | 47 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
+| **Testing** | [`tests/`](tests/) | 53 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
 ## Key results: real market data
 
-Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 trading days), pulled 25 Sep 2026. Reproduce with `python run_analysis.py --live`; outputs land in [`reports/live/`](reports/live/).
+Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 trading days), pulled 25 Sep 2026. Reproduce with `python run_analysis.py --live`; outputs land in [`reports/live/`](reports/live/). The data-quality check flags one gap in the feed: no close for EFA, LQD and VNQ on 22 Sep 2026, so that date is dropped for every asset before returns are computed ([`reports/live/data_quality.csv`](reports/live/data_quality.csv)).
 
 | Metric | Portfolio |
 |---|---|
@@ -165,7 +166,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 47 tests
+pytest                           # 53 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -174,12 +175,13 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 
 ```
 ├── run_analysis.py              # CLI entry point (demo / --live / --regenerate)
-├── sql/                         # schema + 5 analytical queries (the SQL showcase)
+├── sql/                         # schema + 6 queries: analytics + a data-quality check
 ├── src/portfolio_risk/
 │   ├── config.py                # asset universe, weights, regime parameters
 │   ├── data_generator.py        # regime-switching correlated GBM (NumPy)
 │   ├── live_data.py             # optional yfinance loader (same schema)
 │   ├── database.py              # SQLite loading + query runner
+│   ├── data_quality.py          # checks on load: duplicates, gaps, bad ticks, stale prices
 │   ├── metrics.py               # Sharpe, Sortino, VaR/CVaR, beta, drawdowns
 │   ├── monte_carlo.py           # 10k-path simulation: normal, Student-t, bootstrap
 │   ├── optimization.py          # closed-form Markowitz frontier
@@ -187,7 +189,7 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── stress.py                # historical crisis replay
 │   └── visualization.py         # 11 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 47 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 53 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
