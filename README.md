@@ -16,7 +16,7 @@ An end-to-end risk analytics pipeline for a multi-asset ETF portfolio, built wit
 ```mermaid
 flowchart LR
     A["Data layer<br/>synthetic generator (NumPy)<br/>or live yfinance feed"] --> B["SQLite<br/>normalised schema<br/>FK + CHECK constraints"]
-    B --> C["SQL analytics<br/>window functions, CTEs,<br/>rolling vol, drawdown ranks"]
+    B --> C["SQL analytics<br/>window functions, CTEs,<br/>rolling vol, drawdown episodes"]
     C --> D["Risk engine<br/>NumPy/pandas<br/>VaR · CVaR · Sharpe · beta"]
     D --> E["Simulation<br/>10k-path Monte Carlo<br/>efficient frontier"]
     E --> G["Validation<br/>VaR backtest (Kupiec)<br/>historical stress tests"]
@@ -34,13 +34,13 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ hist
 
 | Area | Where | What |
 |---|---|---|
-| **SQL** | [`sql/`](sql/) | Window functions (`LAG`, running `MAX`, explicit `ROWS BETWEEN` frames), CTE pipelines, `RANK`/`ROW_NUMBER`, `FIRST_VALUE`/`LAST_VALUE`, multi-table joins, schema design with FK + CHECK constraints |
+| **SQL** | [`sql/`](sql/) | Window functions (`LAG`, running `MAX`, explicit `ROWS BETWEEN` frames), CTE pipelines, `RANK`/`ROW_NUMBER`, gaps-and-islands episode grouping, `FIRST_VALUE`/`LAST_VALUE`, multi-table joins, schema design with FK + CHECK constraints |
 | **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
 | **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
 | **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
-| **Testing** | [`tests/`](tests/) | 53 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Testing** | [`tests/`](tests/) | 55 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
 ## Key results: real market data
@@ -52,13 +52,21 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 | Annualised return | **7.9%** |
 | Annualised volatility | **13.0%** (vs 17.5% weighted average of holdings: diversification saves ~4.5 pts) |
 | Sharpe / Sortino | **0.46 / 0.66** |
-| Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together) |
+| Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together; back to the old peak on 27 Mar 2024) |
 | Daily VaR / CVaR (95%) | **1.28% / 1.82%** |
 | Daily VaR (99%): historical vs parametric | **2.08% vs 1.87%** |
 | 1-year Monte Carlo VaR (95%, $100k) | **$12,713** |
 | P(loss) over 1 year | **28.0%** |
 
 **Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
+
+**Worst drawdown episodes.** Each fall counted once, from peak to trough to recovery:
+
+| Peak | Low | Fall | Back to peak |
+|---|---|---|---|
+| 27 Dec 2021 | 14 Oct 2022 | **−26.3%** | 27 Mar 2024 (565 trading days) |
+| 18 Feb 2025 | 8 Apr 2025 | **−11.7%** | 16 May 2025 (62 trading days) |
+| 25 Feb 2026 | 27 Mar 2026 | **−7.8%** | 17 Apr 2026 (36 trading days) |
 
 Full per-asset table: [`reports/live/summary_metrics.csv`](reports/live/summary_metrics.csv) · SQL query outputs: [`reports/live/sql/`](reports/live/sql/)
 
@@ -142,6 +150,8 @@ FROM rolling
 WHERE n_obs = 21;
 ```
 
+[`drawdown_events.sql`](sql/drawdown_events.sql) is the other one worth a look: it groups days into drawdown episodes (a gaps-and-islands problem, where a running count of new highs becomes the episode ID) and finds each one's peak, trough and recovery.
+
 Every query is unit-tested against an independent pandas implementation of the same statistic ([`tests/test_database.py`](tests/test_database.py)), so the SQL is provably correct, not just plausible.
 
 ## Gallery
@@ -166,7 +176,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 53 tests
+pytest                           # 55 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -189,7 +199,7 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── stress.py                # historical crisis replay
 │   └── visualization.py         # 11 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 53 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 55 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
