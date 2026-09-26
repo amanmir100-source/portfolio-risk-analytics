@@ -11,10 +11,10 @@ stdlib sqlite3. No SciPy (normal quantiles come from `statistics.NormalDist`).
 
 ```bash
 pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
-python run_analysis.py             # full pipeline on the bundled demo dataset (~4s)
+python run_analysis.py             # full pipeline on the bundled demo dataset (~10s)
 python run_analysis.py --live      # real market data via yfinance (+ stress tests)
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 40 tests, ~3s
+pytest                             # 47 tests, ~4s
 ```
 
 ## Architecture map
@@ -33,6 +33,9 @@ pytest                             # 40 tests, ~3s
   annualised return is geometric.
 - `src/portfolio_risk/monte_carlo.py`, `optimization.py` — simulation and
   closed-form Markowitz frontier (pure linear algebra, no optimiser).
+  `simulate_portfolio(method=...)` takes "normal" (default; keep its output
+  unchanged), "student_t" or "bootstrap". Each method must stay reproducible
+  and give the same result for any chunk_size.
 - `src/portfolio_risk/backtest.py` — rolling out-of-sample VaR backtest + Kupiec
   test. Forecasts must only use past days; `shift(1)` is what enforces it.
 - `src/portfolio_risk/stress.py` — replays `SCENARIOS` (S&P 500 peak/trough
