@@ -101,6 +101,48 @@ def max_drawdown(r: pd.Series) -> float:
     return float(drawdown_series(r).min())
 
 
+def drawdown_episodes(values: pd.Series, top: int | None = 5) -> pd.DataFrame:
+    """Deepest drawdown episodes of a price or wealth series.
+
+    Every new high starts a new episode; each one is summarised by its peak,
+    trough and recovery (the first day back at the old peak, None if not yet).
+    Pandas twin of sql/drawdown_events.sql. `drawdown` is a negative fraction.
+    """
+    v = pd.Series(values).dropna().sort_index()
+    peak = v.cummax()
+    episode = (v >= peak).cumsum().to_numpy()
+    dates = [d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else d for d in v.index]
+    rows = []
+    for eid in np.unique(episode):
+        pos = np.flatnonzero(episode == eid)
+        first, last = pos[0], pos[-1]
+        seg = v.iloc[first:last + 1]
+        peak_close = float(peak.iloc[first])
+        if seg.min() >= peak_close:
+            continue
+        trough = first + int(np.argmin(seg.to_numpy()))  # first day of the low
+        recovered = last + 1 < len(v)
+        rows.append({
+            "peak_date": dates[first],
+            "peak_close": peak_close,
+            "trough_date": dates[trough],
+            "trough_close": float(v.iloc[trough]),
+            "drawdown": float(v.iloc[trough]) / peak_close - 1.0,
+            "recovery_date": dates[last + 1] if recovered else None,
+            "days_to_trough": trough - first,
+            "days_to_recover": last + 1 - first if recovered else None,
+        })
+    cols = ["peak_date", "peak_close", "trough_date", "trough_close", "drawdown",
+            "recovery_date", "days_to_trough", "days_to_recover", "dd_rank"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    out = pd.DataFrame(rows)
+    out["days_to_recover"] = out["days_to_recover"].astype("Int64")
+    out["dd_rank"] = out["drawdown"].rank(method="min").astype(int)
+    out = out.sort_values(["dd_rank", "peak_date"]).reset_index(drop=True)
+    return out[out["dd_rank"] <= top][cols] if top else out[cols]
+
+
 def calmar_ratio(r: pd.Series) -> float:
     """Annualised return / |max drawdown|."""
     mdd = abs(max_drawdown(r))
