@@ -14,15 +14,19 @@ pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
 python run_analysis.py             # full pipeline on the bundled demo dataset (~10s)
 python run_analysis.py --live      # real market data via yfinance (+ stress tests)
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 47 tests, ~4s
+pytest                             # 53 tests, ~4s
 ```
 
 ## Architecture map
 
 - `sql/` — ALL analytical SQL lives here as standalone .sql files (schema,
   daily returns, rolling volatility, monthly performance, drawdown ranking,
-  asset summary). Never inline SQL strings in Python; add a new .sql file and
+  asset summary, data-quality gaps). Never inline SQL strings in Python; add a new .sql file and
   register it in `database.ANALYTICS_QUERIES`.
+- `src/portfolio_risk/data_quality.py` — runs on load. Duplicates and bad
+  closes raise DataQualityError (the DB constraints would reject them anyway);
+  gaps, 25%+ moves and 5-day stale runs are warnings in data_quality.csv.
+  `missing_closes()` is the pandas twin of `sql/data_quality.sql`.
 - `src/portfolio_risk/config.py` — asset universe, portfolio weights, regime
   parameters. Correlation matrices are order-sensitive (follow `TICKERS`).
 - `src/portfolio_risk/data_generator.py` — regime-switching correlated GBM.
