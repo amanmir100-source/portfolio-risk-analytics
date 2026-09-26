@@ -1,0 +1,4 @@
+method,var_95,cvar_95,prob_loss,median_terminal,detail
+normal,10350.7702,15079.7682,0.2169,110330.0231,
+student_t,10265.3764,14874.4664,0.2129,110269.2403,dof 6.8
+bootstrap,9226.0904,13916.9289,0.202,111005.965,21-day blocks

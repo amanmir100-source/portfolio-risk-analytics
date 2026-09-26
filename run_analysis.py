@@ -33,6 +33,7 @@ except ImportError:  # fallback: run straight from the repo without installing
 
 from portfolio_risk import (backtest, config, data_generator, database, metrics, stress,
                             visualization)
+from portfolio_risk.monte_carlo import METHODS as MC_METHODS
 from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import efficient_frontier_analysis
 
@@ -109,8 +110,21 @@ def main() -> None:
 
     # -------------------------------------------------------------- simulations
     mc = simulate_portfolio(returns, config.PORTFOLIO_WEIGHTS, n_sims=args.sims)
+    mc_models = {m: mc if m == "normal" else
+                 simulate_portfolio(returns, config.PORTFOLIO_WEIGHTS, n_sims=args.sims, method=m)
+                 for m in MC_METHODS}
+    mc_table = pd.DataFrame([{
+        "method": m,
+        "var_95": r.var_amount,
+        "cvar_95": r.cvar_amount,
+        "prob_loss": r.prob_loss,
+        "median_terminal": r.summary["median_terminal"],
+        "detail": (f"dof {r.summary['student_t_dof']:.1f}" if m == "student_t" else
+                   "21-day blocks" if m == "bootstrap" else ""),
+    } for m, r in mc_models.items()])
+    mc_table.round(4).to_csv(reports_dir / "mc_comparison.csv", index=False)
     frontier = efficient_frontier_analysis(returns, config.PORTFOLIO_WEIGHTS)
-    print(f"[5/8] Simulation : Monte Carlo {mc.n_sims:,} paths | "
+    print(f"[5/8] Simulation : Monte Carlo {mc.n_sims:,} paths x {len(mc_models)} shock models | "
           f"frontier cloud 20,000 portfolios")
 
     # ------------------------------------------------------------- var backtest
@@ -154,6 +168,7 @@ def main() -> None:
         visualization.plot_monthly_heatmap(port_r,
                                            figures_dir / "08_monthly_returns_heatmap.png"),
         visualization.plot_var_backtest(bt, figures_dir / "09_var_backtest.png"),
+        visualization.plot_mc_comparison(mc_models, figures_dir / "11_mc_shock_models.png"),
     ]
     if scenarios is not None:
         charts.append(visualization.plot_stress_scenarios(
@@ -174,6 +189,8 @@ def main() -> None:
     print(f"  1-yr MC VaR (95%)      : ${mc.var_amount:>10,.0f} on $100,000 "
           f"({mc.summary['var_95_pct']:.1%})")
     print(f"  P(loss) over 1 yr      : {mc.prob_loss:>8.1%}")
+    print("  1-yr MC VaR by model   : " + " | ".join(
+        f"{m} ${r.var_amount:,.0f}" for m, r in mc_models.items()))
     top_weights = frontier.max_sharpe_weights[frontier.max_sharpe_weights > 0.01]
     print(f"  Max-Sharpe (long-only) : "
           f"{{{', '.join(f'{t}: {float(v):.0%}' for t, v in top_weights.items())}}}")
