@@ -7,6 +7,8 @@
 
 **Built to answer one question: how much could this portfolio lose, and how confident can we be in that number?**
 
+**[Read the one-page risk memo →](RISK_MEMO.md)** the findings written up for a portfolio manager: current risk, what drives it, how it held up in 2022, and one recommendation.
+
 An end-to-end risk analytics pipeline for a multi-asset ETF portfolio, built with **SQL (SQLite)** and **Python (NumPy / pandas / matplotlib)** — no black-box libraries. Market data flows into a relational database, gets shaped by analytical SQL (window functions, CTEs), and is then priced for risk by a vectorised Python engine: VaR/CVaR three ways, Monte Carlo simulation, and a closed-form Markowitz efficient frontier.
 
 ![Growth of $10,000, real market data](reports/live/figures/01_cumulative_growth.png)
