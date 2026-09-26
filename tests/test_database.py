@@ -3,6 +3,7 @@ independent pandas implementation of the same statistic."""
 import sqlite3
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from portfolio_risk import database, metrics
@@ -80,6 +81,35 @@ def test_sql_worst_drawdown_matches_pandas(db):
         "drawdown_pct"
     ].iloc[0]
     assert sql_worst == pytest.approx(round(pandas_worst * 100, 2), abs=0.02)
+
+
+def test_sql_drawdown_episodes_match_pandas(db):
+    db_path, prices = db
+    sql = database.run_query_file(db_path, "drawdown_events")
+    wide = metrics.to_wide(prices)
+    for ticker in wide.columns:
+        ours = sql[sql["ticker"] == ticker].reset_index(drop=True)
+        twin = metrics.drawdown_episodes(wide[ticker], top=5)
+        assert list(ours["peak_date"]) == list(twin["peak_date"]), ticker
+        assert list(ours["trough_date"]) == list(twin["trough_date"]), ticker
+        assert list(ours["recovery_date"].fillna("none")) == list(
+            twin["recovery_date"].fillna("none")), ticker
+        assert ours["drawdown_pct"].to_numpy() == pytest.approx(
+            (twin["drawdown"] * 100).round(2).to_numpy(), abs=0.011)
+
+
+def test_drawdown_episodes_are_separate_falls_not_days():
+    # two falls: 100 -> 80 -> 100 (recovered), then 110 -> 88 (not recovered)
+    closes = [100, 90, 80, 95, 100, 110, 99, 88, 90]
+    dates = pd.bdate_range("2024-01-01", periods=len(closes))
+    ep = metrics.drawdown_episodes(pd.Series(closes, index=dates, dtype=float))
+    assert len(ep) == 2  # two episodes, not the five worst days
+    first, second = ep.sort_values("peak_date").to_dict("records")
+    assert first["drawdown"] == pytest.approx(-0.20)
+    assert first["recovery_date"] == dates[4].strftime("%Y-%m-%d")
+    assert (first["days_to_trough"], first["days_to_recover"]) == (2, 4)
+    assert second["drawdown"] == pytest.approx(-0.20)
+    assert pd.isna(second["recovery_date"])  # None or NaN depending on pandas
 
 
 def test_asset_summary_joins_weights_and_reference_data(db):

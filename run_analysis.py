@@ -115,6 +115,8 @@ def main() -> None:
     summary = metrics.summary_table(returns, config.PORTFOLIO_WEIGHTS)
     reports_dir.mkdir(parents=True, exist_ok=True)
     summary.round(4).to_csv(reports_dir / "summary_metrics.csv")
+    port_episodes = metrics.drawdown_episodes((1.0 + port_r).cumprod(), top=3)
+    port_episodes.round(4).to_csv(reports_dir / "portfolio_drawdowns.csv", index=False)
     print(f"[4/8] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
 
     # -------------------------------------------------------------- simulations
@@ -193,6 +195,10 @@ def main() -> None:
     print(f"  Sharpe ratio           : {port_summary['sharpe']:>8.2f}")
     print(f"  Sortino ratio          : {port_summary['sortino']:>8.2f}")
     print(f"  Max drawdown           : {port_summary['max_drawdown']:>8.2%}")
+    for e in port_episodes.itertuples(index=False):
+        back = (f"recovered {e.recovery_date} ({e.days_to_recover} days)"
+                if pd.notna(e.recovery_date) else "not yet recovered")
+        print(f"    {e.drawdown:>7.1%}  peak {e.peak_date} → low {e.trough_date}, {back}")
     print(f"  Daily VaR (95%)        : {port_summary['var_95_daily']:>8.2%}")
     print(f"  Daily CVaR (95%)       : {port_summary['cvar_95_daily']:>8.2%}")
     print(f"  1-yr MC VaR (95%)      : ${mc.var_amount:>10,.0f} on $100,000 "
