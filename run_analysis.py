@@ -31,8 +31,8 @@ try:
 except ImportError:  # fallback: run straight from the repo without installing
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from portfolio_risk import (backtest, config, data_generator, database, metrics, stress,
-                            visualization)
+from portfolio_risk import (backtest, config, data_generator, data_quality, database, metrics,
+                            stress, visualization)
 from portfolio_risk.monte_carlo import METHODS as MC_METHODS
 from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import efficient_frontier_analysis
@@ -85,6 +85,7 @@ def main() -> None:
     print(f"[1/8] Data       : {source}")
     print(f"                 {len(prices):,} rows | {len(tickers)} tickers | "
           f"{prices['date'].min()} → {prices['date'].max()}")
+    data_quality.check_structure(prices)  # stops the run if the data is unusable
 
     # ---------------------------------------------------------------- sqlite
     database.initialize_database(
@@ -98,6 +99,14 @@ def main() -> None:
     sql_results = database.run_all_analytics(db_path, out_dir=sql_out_dir)
     print(f"[3/8] SQL layer  : {len(sql_results)} analytical queries "
           f"(window functions, CTEs) → {out}/sql/*.csv")
+    dq = data_quality.warnings_report(prices, sql_results["data_quality"])
+    dq.to_csv(reports_dir / "data_quality.csv", index=False)
+    if dq.empty:
+        print("      Data quality: clean (no gaps, extreme moves or stale prices)")
+    else:
+        print(f"      Data quality: {len(dq)} warning(s) → {out}/data_quality.csv")
+        for r in dq.itertuples(index=False):
+            print(f"        {r.check:<13} {r.date}  {r.ticker}: {r.detail}")
 
     # ------------------------------------------------------------- risk engine
     wide = metrics.to_wide(prices)
