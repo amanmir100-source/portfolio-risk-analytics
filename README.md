@@ -17,10 +17,10 @@ An end-to-end risk analytics pipeline for a multi-asset ETF portfolio, built wit
 flowchart LR
     A["Data layer<br/>synthetic generator (NumPy)<br/>or live yfinance feed"] --> B["SQLite<br/>normalised schema<br/>FK + CHECK constraints"]
     B --> C["SQL analytics<br/>window functions, CTEs,<br/>rolling vol, drawdown episodes"]
-    C --> D["Risk engine<br/>NumPy/pandas<br/>VaR · CVaR · Sharpe · beta"]
+    C --> D["Risk engine<br/>NumPy/pandas<br/>VaR · CVaR · Sharpe · beta<br/>risk contributions"]
     D --> E["Simulation<br/>10k-path Monte Carlo<br/>efficient frontier"]
     E --> G["Validation<br/>VaR backtest (Kupiec)<br/>historical stress tests"]
-    G --> F["Report<br/>11 matplotlib figures<br/>+ CSV outputs"]
+    G --> F["Report<br/>12 matplotlib figures<br/>+ CSV outputs"]
 ```
 
 The pipeline is data-source agnostic: it ships with a reproducible synthetic dataset (so it runs anywhere, instantly) and switches to **live market data** with one flag:
@@ -37,10 +37,10 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ hist
 | **SQL** | [`sql/`](sql/) | Window functions (`LAG`, running `MAX`, explicit `ROWS BETWEEN` frames), CTE pipelines, `RANK`/`ROW_NUMBER`, gaps-and-islands episode grouping, `FIRST_VALUE`/`LAST_VALUE`, multi-table joins, schema design with FK + CHECK constraints |
 | **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, exact long-only max-Sharpe by subset enumeration, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
-| **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
+| **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Euler and CVaR risk contributions, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
 | **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
 | **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
-| **Testing** | [`tests/`](tests/) | 58 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Testing** | [`tests/`](tests/) | 63 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
 ## Key results: real market data
@@ -51,7 +51,7 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 |---|---|
 | Annualised return | **7.9%** |
 | Annualised volatility | **13.0%** (vs 17.5% weighted average of holdings: diversification saves ~4.5 pts) |
-| Sharpe / Sortino | **0.46 / 0.66** |
+| Sharpe / Sortino | **0.50 / 0.72** |
 | Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together; back to the old peak on 27 Mar 2024) |
 | Daily VaR / CVaR (95%) | **1.28% / 1.82%** |
 | Daily VaR (99%): historical vs parametric | **2.08% vs 1.87%** |
@@ -59,6 +59,21 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 | P(loss) over 1 year | **28.0%** |
 
 **Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
+
+**Where the risk comes from.** Each asset's share of portfolio volatility (Euler split) and of the loss on the worst 5% of days (CVaR split); both add up to 100%:
+
+| Asset | Weight | Share of volatility | Share of tail loss |
+|---|---|---|---|
+| SPY | 25% | **31%** | **31%** |
+| QQQ | 15% | **23%** | **23%** |
+| VNQ | 10% | 11% | 12% |
+| EFA | 10% | 11% | 10% |
+| IWM | 5% | 7% | 7% |
+| TLT | 15% | 7% | 7% |
+| GLD | 10% | 5% | 6% |
+| LQD | 10% | 4% | 4% |
+
+Stocks are 55% of the money but about 72% of the risk. The bond and gold sleeves (35% of the weight) carry about 17%, and TLT still adds a little risk rather than offsetting it.
 
 **Worst drawdown episodes.** Each fall counted once, from peak to trough to recovery:
 
@@ -117,7 +132,7 @@ The default run uses a seeded synthetic dataset, so the pipeline runs anywhere, 
 |---|---|
 | Annualised return | **10.6%** |
 | Annualised volatility | **12.8%** (vs 18.7% weighted-average of holdings — diversification saves ~6 pts) |
-| Sharpe / Sortino | **0.67 / 1.04** |
+| Sharpe / Sortino | **0.69 / 1.07** |
 | Max drawdown | **−20.7%** |
 | Daily VaR / CVaR (95%) | **1.16% / 1.53%** |
 | 1-year Monte Carlo VaR (95%, $100k) | **$10,351** |
@@ -166,7 +181,7 @@ Charts from the real-data run. The demo run produces the same set in [`reports/f
 | ![Drawdown](reports/live/figures/04_portfolio_drawdown.png) | ![VaR distribution](reports/live/figures/05_return_distribution_var.png) |
 | ![Monte Carlo](reports/live/figures/06_monte_carlo.png) | ![Frontier](reports/live/figures/07_efficient_frontier.png) |
 | ![VaR backtest](reports/live/figures/09_var_backtest.png) | ![Stress scenarios](reports/live/figures/10_stress_scenarios.png) |
-| ![Monte Carlo shock models](reports/live/figures/11_mc_shock_models.png) | |
+| ![Monte Carlo shock models](reports/live/figures/11_mc_shock_models.png) | ![Risk contributions](reports/live/figures/12_risk_contributions.png) |
 
 ![Monthly heatmap](reports/live/figures/08_monthly_returns_heatmap.png)
 
@@ -178,7 +193,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 58 tests
+pytest                           # 63 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -197,11 +212,12 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── metrics.py               # Sharpe, Sortino, VaR/CVaR, beta, drawdowns
 │   ├── monte_carlo.py           # 10k-path simulation: normal, Student-t, bootstrap
 │   ├── optimization.py          # closed-form frontier + exact long-only max-Sharpe
+│   ├── risk_contribution.py     # which assets drive volatility and tail loss
 │   ├── backtest.py              # rolling VaR backtest + Kupiec test
 │   ├── stress.py                # historical crisis replay
-│   └── visualization.py         # 11 report figures
+│   └── visualization.py         # 12 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 58 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 63 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```

@@ -14,7 +14,7 @@ pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
 python run_analysis.py             # full pipeline on the bundled demo dataset (~10s)
 python run_analysis.py --live      # real market data via yfinance (+ stress tests)
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 58 tests, ~4s
+pytest                             # 63 tests, ~4s
 ```
 
 ## Architecture map
@@ -34,7 +34,8 @@ pytest                             # 58 tests, ~4s
   don't change the seed without regenerating data, reports and README numbers.
 - `src/portfolio_risk/metrics.py` — risk/performance metrics. Conventions:
   252 trading days, 2% risk-free, VaR/CVaR reported as POSITIVE losses,
-  annualised return is geometric.
+  annualised return and Calmar are geometric; Sharpe and Sortino use the
+  arithmetic mean x 252 so they match the frontier (one Sharpe everywhere).
 - `src/portfolio_risk/monte_carlo.py`, `optimization.py` — simulation and
   closed-form Markowitz frontier (pure linear algebra, no optimiser).
   Long-only max-Sharpe is exact: tangency weights on every asset subset,
@@ -47,6 +48,8 @@ pytest                             # 58 tests, ~4s
 - `src/portfolio_risk/stress.py` — replays `SCENARIOS` (S&P 500 peak/trough
   dates) on current weights. Needs history back to 2007, so it only runs with
   `--live`; the demo run skips it.
+- `src/portfolio_risk/risk_contribution.py` — Euler volatility and CVaR
+  contributions per asset; both must sum exactly to the portfolio totals.
 - `run_analysis.py` — CLI orchestrator; writes `reports/` (demo) or
   `reports/live/` (`--live`), so a live run never overwrites the demo outputs.
 
@@ -60,7 +63,9 @@ Everything is seeded; tests must stay deterministic.
 ## Gotchas
 
 - SQLite has no `STDDEV`: rolling vol derives Bessel-corrected stdev from
-  AVG(r²) − AVG(r)² inside the window; keep the `MAX(..., 0.0)` guard.
+  AVG(r²) − AVG(r)² inside the window; keep the `MAX(..., 0.0)` guard. Its
+  output is rounded in Python (`database.ROUND_DECIMALS`), not with SQL
+  ROUND(), which differs between SQLite versions.
 - `reports/` (demo) and `reports/live/` (real data) are both committed. The
   README headline and gallery embed `reports/live/`; regenerate with
   `python run_analysis.py` and `--live` after any change that shifts the numbers,
