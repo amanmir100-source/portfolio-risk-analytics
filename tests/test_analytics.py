@@ -8,7 +8,9 @@ from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import (
     analytic_frontier,
     efficient_frontier_analysis,
+    max_sharpe_long_only,
     portfolio_point,
+    tangency_weights,
 )
 
 WEIGHTS = {"SPY": 0.4, "QQQ": 0.2, "TLT": 0.2, "GLD": 0.2}
@@ -87,3 +89,24 @@ def test_portfolio_point_vol_matches_series_vol(returns):
     vol, _ = portfolio_point(returns, WEIGHTS)
     port_r = metrics.portfolio_returns(returns, WEIGHTS)
     assert vol == pytest.approx(port_r.std(ddof=1) * np.sqrt(252), rel=1e-9)
+
+
+def test_exact_max_sharpe_matches_hand_calculation():
+    # two independent assets: weights are proportional to excess return / variance
+    mu, cov = np.array([0.10, 0.06]), np.diag([0.04, 0.01])
+    w = max_sharpe_long_only(mu, cov, risk_free=0.02)
+    assert w == pytest.approx([1 / 3, 2 / 3])  # (0.08/0.04, 0.04/0.01) = (2, 4)
+
+
+def test_exact_max_sharpe_drops_assets_below_the_risk_free_rate():
+    mu, cov = np.array([0.10, 0.01]), np.diag([0.04, 0.01])
+    w = max_sharpe_long_only(mu, cov, risk_free=0.02)
+    assert w == pytest.approx([1.0, 0.0])
+    # unconstrained, the same inputs would short the second asset
+    assert tangency_weights(mu, cov, 0.02)[1] < 0
+
+
+def test_exact_max_sharpe_beats_every_random_portfolio(returns):
+    fr = efficient_frontier_analysis(returns, WEIGHTS, n_portfolios=5000, seed=8)
+    assert fr.max_sharpe >= fr.cloud["sharpe"].max() - 1e-12
+    assert fr.max_sharpe >= fr.sampled_max_sharpe

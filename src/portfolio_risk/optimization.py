@@ -8,9 +8,15 @@ Two complementary views, both pure NumPy (no optimiser dependency):
        sigma^2(r*) = (A*r*^2 - 2*B*r* + C) / D
    The global minimum-variance portfolio sits at r* = B/A with var = 1/A.
 
-2. A 20,000-portfolio long-only Monte Carlo cloud (Dirichlet-sampled weights)
-   coloured by Sharpe ratio, from which the best long-only Sharpe portfolio
-   is selected.
+2. Exact long-only max-Sharpe portfolio. On any fixed set of assets the best
+   Sharpe portfolio is the tangency portfolio, w ~ S^-1 (mu - rf). The
+   long-only optimum is the tangency portfolio of some subset whose weights
+   all come out positive (KKT conditions), so trying every subset and keeping
+   the best valid one is exact. 8 assets means 255 subsets; for hundreds of
+   assets you would use a QP solver instead.
+
+3. A 20,000-portfolio long-only Monte Carlo cloud (Dirichlet-sampled weights)
+   coloured by Sharpe ratio, for context on the chart.
 """
 from __future__ import annotations
 
@@ -29,10 +35,13 @@ class FrontierResult:
     cloud: pd.DataFrame            # columns: ret, vol, sharpe (long-only random)
     frontier: pd.DataFrame         # columns: ret, vol (analytic curve)
     min_var_point: tuple[float, float]        # (vol, ret)
-    max_sharpe_point: tuple[float, float]     # (vol, ret) from long-only cloud
+    max_sharpe_point: tuple[float, float]     # (vol, ret), exact long-only optimum
     max_sharpe_weights: pd.Series
+    max_sharpe: float
     current_point: tuple[float, float]        # (vol, ret) of the model portfolio
     current_sharpe: float
+    sampled_max_sharpe_point: tuple[float, float] = (np.nan, np.nan)  # best of the cloud
+    sampled_max_sharpe: float = np.nan
 
 
 def _annualized_inputs(returns: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
@@ -64,6 +73,32 @@ def analytic_frontier(returns: pd.DataFrame, n_points: int = 200) -> pd.DataFram
     targets = np.linspace(r_min_var, mu.max() * 1.10, n_points)
     variances = (a * targets**2 - 2.0 * b * targets + c) / d
     return pd.DataFrame({"ret": targets, "vol": np.sqrt(variances)})
+
+
+def tangency_weights(mu: np.ndarray, cov: np.ndarray, risk_free: float) -> np.ndarray:
+    """Unconstrained max-Sharpe weights (shorting allowed), summing to 1."""
+    w = np.linalg.solve(cov, mu - risk_free)
+    return w / w.sum()
+
+
+def max_sharpe_long_only(mu: np.ndarray, cov: np.ndarray, risk_free: float) -> np.ndarray:
+    """Exact long-only max-Sharpe weights by checking every subset of assets."""
+    n = len(mu)
+    excess = mu - risk_free
+    best_sharpe, best_w = -np.inf, None
+    for mask in range(1, 2**n):
+        idx = [i for i in range(n) if mask >> i & 1]
+        sub = np.linalg.solve(cov[np.ix_(idx, idx)], excess[idx])
+        if (sub <= 0).any():  # not a valid long-only candidate
+            continue
+        w = np.zeros(n)
+        w[idx] = sub / sub.sum()
+        sharpe = (w @ excess) / np.sqrt(w @ cov @ w)
+        if sharpe > best_sharpe:
+            best_sharpe, best_w = sharpe, w
+    if best_w is None:
+        raise ValueError("no long-only portfolio beats the risk-free rate")
+    return best_w
 
 
 def random_portfolios(
@@ -98,20 +133,25 @@ def efficient_frontier_analysis(
     a = ones @ inv @ ones
     b = ones @ inv @ mu
 
-    cloud, w_matrix = random_portfolios(returns, n_portfolios, seed, risk_free)
+    cloud, _ = random_portfolios(returns, n_portfolios, seed, risk_free)
     best = int(cloud["sharpe"].idxmax())
-    max_sharpe_weights = pd.Series(w_matrix[best], index=returns.columns).round(4)
+    w_exact = max_sharpe_long_only(mu, cov, risk_free)
+    exact_vol, exact_ret = float(np.sqrt(w_exact @ cov @ w_exact)), float(w_exact @ mu)
+    max_sharpe_weights = pd.Series(w_exact, index=returns.columns).round(4)
 
     cur_vol, cur_ret = portfolio_point(returns, weights)
     return FrontierResult(
         cloud=cloud,
         frontier=analytic_frontier(returns),
         min_var_point=(float(np.sqrt(1.0 / a)), float(b / a)),
-        max_sharpe_point=(
+        max_sharpe_point=(exact_vol, exact_ret),
+        max_sharpe_weights=max_sharpe_weights,
+        max_sharpe=(exact_ret - risk_free) / exact_vol,
+        current_point=(cur_vol, cur_ret),
+        current_sharpe=float((cur_ret - risk_free) / cur_vol),
+        sampled_max_sharpe_point=(
             float(cloud.loc[best, "vol"]),
             float(cloud.loc[best, "ret"]),
         ),
-        max_sharpe_weights=max_sharpe_weights,
-        current_point=(cur_vol, cur_ret),
-        current_sharpe=float((cur_ret - risk_free) / cur_vol),
+        sampled_max_sharpe=float(cloud.loc[best, "sharpe"]),
     )

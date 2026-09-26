@@ -212,7 +212,8 @@ def plot_efficient_frontier(fr: FrontierResult, path: str | Path) -> Path:
             lw=2.4, label="Efficient frontier (analytic)")
     for (vol, ret), label, marker, color in (
         (fr.min_var_point, "Min variance", "D", "#1f77b4"),
-        (fr.max_sharpe_point, "Max Sharpe (long-only)", "*", ACCENT),
+        (fr.sampled_max_sharpe_point, "Best of the random cloud", "^", "#bbbbbb"),
+        (fr.max_sharpe_point, "Max Sharpe (long-only, exact)", "*", ACCENT),
         (fr.current_point, "Model portfolio", "o", RED),
     ):
         ax.scatter([vol], [ret], marker=marker, s=220 if marker == "*" else 110,
