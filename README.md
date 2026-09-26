@@ -35,12 +35,12 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ hist
 | Area | Where | What |
 |---|---|---|
 | **SQL** | [`sql/`](sql/) | Window functions (`LAG`, running `MAX`, explicit `ROWS BETWEEN` frames), CTE pipelines, `RANK`/`ROW_NUMBER`, gaps-and-islands episode grouping, `FIRST_VALUE`/`LAST_VALUE`, multi-table joins, schema design with FK + CHECK constraints |
-| **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, dataclasses, type hints |
+| **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, exact long-only max-Sharpe by subset enumeration, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
 | **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
 | **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
-| **Testing** | [`tests/`](tests/) | 55 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Testing** | [`tests/`](tests/) | 58 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
 ## Key results: real market data
@@ -67,6 +67,8 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 | 27 Dec 2021 | 14 Oct 2022 | **−26.3%** | 27 Mar 2024 (565 trading days) |
 | 18 Feb 2025 | 8 Apr 2025 | **−11.7%** | 16 May 2025 (62 trading days) |
 | 25 Feb 2026 | 27 Mar 2026 | **−7.8%** | 17 Apr 2026 (36 trading days) |
+
+**Max-Sharpe portfolio (long-only, exact):** GLD 58%, SPY 42%, Sharpe 1.08 (the best of 20,000 random portfolios reached 1.04). That is what the last five years rewarded, not a recommendation: gold returned 19% a year over the window, and Markowitz puts the most money wherever history looked best.
 
 Full per-asset table: [`reports/live/summary_metrics.csv`](reports/live/summary_metrics.csv) · SQL query outputs: [`reports/live/sql/`](reports/live/sql/)
 
@@ -176,7 +178,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 55 tests
+pytest                           # 58 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -194,12 +196,12 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── data_quality.py          # checks on load: duplicates, gaps, bad ticks, stale prices
 │   ├── metrics.py               # Sharpe, Sortino, VaR/CVaR, beta, drawdowns
 │   ├── monte_carlo.py           # 10k-path simulation: normal, Student-t, bootstrap
-│   ├── optimization.py          # closed-form Markowitz frontier
+│   ├── optimization.py          # closed-form frontier + exact long-only max-Sharpe
 │   ├── backtest.py              # rolling VaR backtest + Kupiec test
 │   ├── stress.py                # historical crisis replay
 │   └── visualization.py         # 11 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 55 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 58 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
@@ -212,7 +214,7 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 
 **Backtests don't peek.** Every VaR forecast uses only the 250 days before the day it is judged on (a test enforces this). Kupiec's statistic is chi-squared with one degree of freedom, so its p-value comes from `math.erfc`; still no SciPy.
 
-**Frontier is closed-form.** The minimum-variance frontier comes from the classic matrix algebra (A = 1ᵀΣ⁻¹1, B = 1ᵀΣ⁻¹μ, C = μᵀΣ⁻¹μ), validated against a 20,000-portfolio Dirichlet-sampled long-only cloud.
+**Frontier is closed-form.** The minimum-variance frontier comes from the classic matrix algebra (A = 1ᵀΣ⁻¹1, B = 1ᵀΣ⁻¹μ, C = μᵀΣ⁻¹μ), validated against a 20,000-portfolio Dirichlet-sampled long-only cloud. The long-only max-Sharpe point is solved exactly: on any set of assets the best portfolio is the tangency portfolio Σ⁻¹(μ − r<sub>f</sub>), so the optimum is the best of the 255 asset subsets whose tangency weights are all positive. No SciPy; for hundreds of assets you'd switch to a QP solver.
 
 ## Disclaimer
 

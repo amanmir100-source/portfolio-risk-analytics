@@ -14,7 +14,7 @@ pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
 python run_analysis.py             # full pipeline on the bundled demo dataset (~10s)
 python run_analysis.py --live      # real market data via yfinance (+ stress tests)
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 55 tests, ~4s
+pytest                             # 58 tests, ~4s
 ```
 
 ## Architecture map
@@ -37,6 +37,8 @@ pytest                             # 55 tests, ~4s
   annualised return is geometric.
 - `src/portfolio_risk/monte_carlo.py`, `optimization.py` — simulation and
   closed-form Markowitz frontier (pure linear algebra, no optimiser).
+  Long-only max-Sharpe is exact: tangency weights on every asset subset,
+  best all-positive one wins (2^n subsets, fine for 8 assets).
   `simulate_portfolio(method=...)` takes "normal" (default; keep its output
   unchanged), "student_t" or "bootstrap". Each method must stay reproducible
   and give the same result for any chunk_size.
