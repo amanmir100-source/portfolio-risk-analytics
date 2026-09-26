@@ -1,0 +1,5 @@
+method,confidence,test_days,expected_breaches,actual_breaches,breach_rate,kupiec_lr,p_value,result
+historical,0.95,1009,50.5,56,0.0555,0.6215,0.4305,pass
+historical,0.99,1009,10.1,9,0.0089,0.1234,0.7253,pass
+parametric,0.95,1009,50.5,38,0.0377,3.5229,0.0605,pass
+parametric,0.99,1009,10.1,6,0.0059,1.9593,0.1616,pass

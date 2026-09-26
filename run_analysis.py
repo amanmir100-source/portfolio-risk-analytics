@@ -31,7 +31,7 @@ try:
 except ImportError:  # fallback: run straight from the repo without installing
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from portfolio_risk import config, data_generator, database, metrics, visualization
+from portfolio_risk import backtest, config, data_generator, database, metrics, visualization
 from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import efficient_frontier_analysis
 
@@ -80,7 +80,7 @@ def main() -> None:
     # ------------------------------------------------------------------ data
     prices, source = load_prices(args, data_dir)
     tickers = sorted(prices["ticker"].unique())
-    print(f"[1/6] Data       : {source}")
+    print(f"[1/7] Data       : {source}")
     print(f"                 {len(prices):,} rows | {len(tickers)} tickers | "
           f"{prices['date'].min()} → {prices['date'].max()}")
 
@@ -89,12 +89,12 @@ def main() -> None:
         db_path, prices, data_generator.assets_frame(), data_generator.weights_frame()
     )
     counts = database.table_row_counts(db_path)
-    print(f"[2/6] SQLite     : {db_path.relative_to(REPO_ROOT)} loaded "
+    print(f"[2/7] SQLite     : {db_path.relative_to(REPO_ROOT)} loaded "
           f"({', '.join(f'{t}={n:,}' for t, n in counts.items())})")
 
     # ----------------------------------------------------------- sql analytics
     sql_results = database.run_all_analytics(db_path, out_dir=sql_out_dir)
-    print(f"[3/6] SQL layer  : {len(sql_results)} analytical queries "
+    print(f"[3/7] SQL layer  : {len(sql_results)} analytical queries "
           f"(window functions, CTEs) → {out}/sql/*.csv")
 
     # ------------------------------------------------------------- risk engine
@@ -104,13 +104,19 @@ def main() -> None:
     summary = metrics.summary_table(returns, config.PORTFOLIO_WEIGHTS)
     reports_dir.mkdir(parents=True, exist_ok=True)
     summary.round(4).to_csv(reports_dir / "summary_metrics.csv")
-    print(f"[4/6] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
+    print(f"[4/7] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
 
     # -------------------------------------------------------------- simulations
     mc = simulate_portfolio(returns, config.PORTFOLIO_WEIGHTS, n_sims=args.sims)
     frontier = efficient_frontier_analysis(returns, config.PORTFOLIO_WEIGHTS)
-    print(f"[5/6] Simulation : Monte Carlo {mc.n_sims:,} paths | "
+    print(f"[5/7] Simulation : Monte Carlo {mc.n_sims:,} paths | "
           f"frontier cloud 20,000 portfolios")
+
+    # ------------------------------------------------------------- var backtest
+    bt = backtest.backtest_var(port_r)
+    bt.table.round(4).to_csv(reports_dir / "var_backtest.csv", index=False)
+    print(f"[6/7] Backtest   : VaR on {bt.table['test_days'].iloc[0]:,} out-of-sample days "
+          f"({bt.window}-day window) → {out}/var_backtest.csv")
 
     # ------------------------------------------------------------------ charts
     port_summary = summary.loc["PORTFOLIO"]
@@ -134,8 +140,9 @@ def main() -> None:
                                               figures_dir / "07_efficient_frontier.png"),
         visualization.plot_monthly_heatmap(port_r,
                                            figures_dir / "08_monthly_returns_heatmap.png"),
+        visualization.plot_var_backtest(bt, figures_dir / "09_var_backtest.png"),
     ]
-    print(f"[6/6] Charts     : {len(charts)} figures → {out}/figures/")
+    print(f"[7/7] Charts     : {len(charts)} figures → {out}/figures/")
 
     # ------------------------------------------------------------------ report
     print("\n" + "-" * 64)
@@ -154,6 +161,11 @@ def main() -> None:
     top_weights = frontier.max_sharpe_weights[frontier.max_sharpe_weights > 0.01]
     print(f"  Max-Sharpe (long-only) : "
           f"{{{', '.join(f'{t}: {float(v):.0%}' for t, v in top_weights.items())}}}")
+
+    print("\n  VaR backtest (Kupiec test, 5% significance):")
+    for row in bt.table.itertuples():
+        print(f"    {row.method:<10} {row.confidence:.0%}: {row.actual_breaches:>3} breaches "
+              f"vs {row.expected_breaches:>5.1f} expected | p = {row.p_value:.3f} → {row.result}")
 
     print(f"\n  Full per-asset table (also in {out}/summary_metrics.csv):\n")
     display = summary.copy()
