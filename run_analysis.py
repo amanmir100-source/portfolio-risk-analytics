@@ -32,7 +32,7 @@ except ImportError:  # fallback: run straight from the repo without installing
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from portfolio_risk import (backtest, config, data_generator, data_quality, database, metrics,
-                            stress, visualization)
+                            risk_contribution, stress, visualization)
 from portfolio_risk.monte_carlo import METHODS as MC_METHODS
 from portfolio_risk.monte_carlo import simulate_portfolio
 from portfolio_risk.optimization import efficient_frontier_analysis
@@ -116,6 +116,8 @@ def main() -> None:
     reports_dir.mkdir(parents=True, exist_ok=True)
     summary.round(4).to_csv(reports_dir / "summary_metrics.csv")
     port_episodes = metrics.drawdown_episodes((1.0 + port_r).cumprod(), top=3)
+    rc = risk_contribution.risk_contributions(returns, config.PORTFOLIO_WEIGHTS)
+    rc.round(4).to_csv(reports_dir / "risk_contributions.csv", index_label="ticker")
     port_episodes.round(4).to_csv(reports_dir / "portfolio_drawdowns.csv", index=False)
     print(f"[4/8] Risk engine: metrics for {len(summary)} rows → {out}/summary_metrics.csv")
 
@@ -180,6 +182,7 @@ def main() -> None:
                                            figures_dir / "08_monthly_returns_heatmap.png"),
         visualization.plot_var_backtest(bt, figures_dir / "09_var_backtest.png"),
         visualization.plot_mc_comparison(mc_models, figures_dir / "11_mc_shock_models.png"),
+        visualization.plot_risk_contributions(rc, figures_dir / "12_risk_contributions.png"),
     ]
     if scenarios is not None:
         charts.append(visualization.plot_stress_scenarios(
@@ -201,6 +204,10 @@ def main() -> None:
         print(f"    {e.drawdown:>7.1%}  peak {e.peak_date} → low {e.trough_date}, {back}")
     print(f"  Daily VaR (95%)        : {port_summary['var_95_daily']:>8.2%}")
     print(f"  Daily CVaR (95%)       : {port_summary['cvar_95_daily']:>8.2%}")
+    top = rc.drop(index="TOTAL").sort_values("vol_share", ascending=False).head(3)
+    print("  Biggest risk sources   : " + " | ".join(
+        f"{t} {r.weight:.0%} of weight → {r.vol_share:.0%} of vol, {r.cvar_share:.0%} of tail"
+        for t, r in top.iterrows()))
     print(f"  1-yr MC VaR (95%)      : ${mc.var_amount:>10,.0f} on $100,000 "
           f"({mc.summary['var_95_pct']:.1%})")
     print(f"  P(loss) over 1 yr      : {mc.prob_loss:>8.1%}")
