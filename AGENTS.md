@@ -12,9 +12,9 @@ stdlib sqlite3. No SciPy (normal quantiles come from `statistics.NormalDist`).
 ```bash
 pip install -e ".[dev]"            # or: pip install -r requirements-dev.txt
 python run_analysis.py             # full pipeline on the bundled demo dataset (~4s)
-python run_analysis.py --live      # real market data via yfinance
+python run_analysis.py --live      # real market data via yfinance (+ stress tests)
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 30 tests, ~2s
+pytest                             # 40 tests, ~3s
 ```
 
 ## Architecture map
@@ -33,6 +33,11 @@ pytest                             # 30 tests, ~2s
   annualised return is geometric.
 - `src/portfolio_risk/monte_carlo.py`, `optimization.py` — simulation and
   closed-form Markowitz frontier (pure linear algebra, no optimiser).
+- `src/portfolio_risk/backtest.py` — rolling out-of-sample VaR backtest + Kupiec
+  test. Forecasts must only use past days; `shift(1)` is what enforces it.
+- `src/portfolio_risk/stress.py` — replays `SCENARIOS` (S&P 500 peak/trough
+  dates) on current weights. Needs history back to 2007, so it only runs with
+  `--live`; the demo run skips it.
 - `run_analysis.py` — CLI orchestrator; writes `reports/` (demo) or
   `reports/live/` (`--live`), so a live run never overwrites the demo outputs.
 

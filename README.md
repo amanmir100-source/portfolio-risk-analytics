@@ -19,14 +19,15 @@ flowchart LR
     B --> C["SQL analytics<br/>window functions, CTEs,<br/>rolling vol, drawdown ranks"]
     C --> D["Risk engine<br/>NumPy/pandas<br/>VaR · CVaR · Sharpe · beta"]
     D --> E["Simulation<br/>10k-path Monte Carlo<br/>efficient frontier"]
-    E --> F["Report<br/>8 matplotlib figures<br/>+ CSV outputs"]
+    E --> G["Validation<br/>VaR backtest (Kupiec)<br/>historical stress tests"]
+    G --> F["Report<br/>10 matplotlib figures<br/>+ CSV outputs"]
 ```
 
 The pipeline is data-source agnostic: it ships with a reproducible synthetic dataset (so it runs anywhere, instantly) and switches to **live market data** with one flag:
 
 ```bash
 python run_analysis.py            # bundled demo dataset (seeded, reproducible)
-python run_analysis.py --live     # real 5y adjusted closes via yfinance
+python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ history back to 2007 for stress tests)
 ```
 
 ## Skills demonstrated
@@ -37,7 +38,8 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance
 | **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR, expected shortfall, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
-| **Testing** | [`tests/`](tests/) | 30 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
+| **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
+| **Testing** | [`tests/`](tests/) | 40 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
 | **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
 
 ## Key results: real market data
@@ -58,6 +60,31 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 **Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
 
 Full per-asset table: [`reports/live/summary_metrics.csv`](reports/live/summary_metrics.csv) · SQL query outputs: [`reports/live/sql/`](reports/live/sql/)
+
+### Does the VaR hold up? Backtest
+
+Each day's VaR is forecast from the previous 250 days only, then compared with what actually happened (1,002 test days). Kupiec's test checks whether the number of breaches is plausible.
+
+| Model | Breaches | Expected | Kupiec p-value | Result |
+|---|---|---|---|---|
+| Historical 95% | 46 | 50.1 | 0.55 | pass |
+| Historical 99% | 10 | 10.0 | 0.99 | pass |
+| Parametric 95% | 44 | 50.1 | 0.37 | pass |
+| Parametric 99% | 13 | 10.0 | 0.37 | pass |
+
+Both models pass. The normal-curve model misses more often at 99% (13 vs 10), in the direction the fat tails suggest, but not by enough to be significant over four years. The misses also bunch up: four of them came within a few days of each other in April 2025.
+
+### Stress scenarios
+
+Today's weights replayed through past crises, S&P 500 peak to trough, held with no rebalancing:
+
+| Crisis | Window | Portfolio |
+|---|---|---|
+| 2008 financial crisis | 9 Oct 2007 – 9 Mar 2009 | **−31.9%** |
+| COVID crash | 19 Feb – 23 Mar 2020 | **−21.5%** |
+| 2022 rate shock | 3 Jan – 12 Oct 2022 | **−25.8%** |
+
+2022 was nearly as bad as 2008 for this portfolio even though stocks fell about half as far. In 2008 long Treasuries (+25%) and gold (+24%) offset part of the loss; in 2022 Treasuries fell 29% alongside stocks. Details: [`reports/live/stress_scenarios.csv`](reports/live/stress_scenarios.csv)
 
 ### Demo dataset (synthetic, reproducible)
 
@@ -106,13 +133,14 @@ Every query is unit-tested against an independent pandas implementation of the s
 
 ## Gallery
 
-Charts from the real-data run. The demo run produces the same set in [`reports/figures/`](reports/figures/).
+Charts from the real-data run. The demo run produces the same set in [`reports/figures/`](reports/figures/), except the stress chart, which needs real history.
 
 | | |
 |---|---|
 | ![Correlation](reports/live/figures/02_correlation_heatmap.png) | ![Rolling vol](reports/live/figures/03_rolling_volatility_sql.png) |
 | ![Drawdown](reports/live/figures/04_portfolio_drawdown.png) | ![VaR distribution](reports/live/figures/05_return_distribution_var.png) |
 | ![Monte Carlo](reports/live/figures/06_monte_carlo.png) | ![Frontier](reports/live/figures/07_efficient_frontier.png) |
+| ![VaR backtest](reports/live/figures/09_var_backtest.png) | ![Stress scenarios](reports/live/figures/10_stress_scenarios.png) |
 
 ![Monthly heatmap](reports/live/figures/08_monthly_returns_heatmap.png)
 
@@ -124,7 +152,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~4s)
-pytest                           # 30 tests
+pytest                           # 40 tests
 ```
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
@@ -142,9 +170,11 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── metrics.py               # Sharpe, Sortino, VaR/CVaR, beta, drawdowns
 │   ├── monte_carlo.py           # 10k-path portfolio simulation
 │   ├── optimization.py          # closed-form Markowitz frontier
-│   └── visualization.py         # 8 report figures
+│   ├── backtest.py              # rolling VaR backtest + Kupiec test
+│   ├── stress.py                # historical crisis replay
+│   └── visualization.py         # 10 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 30 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 40 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
@@ -154,6 +184,8 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 **Three VaR estimates, on purpose.** Historical VaR reads the empirical quantile (assumption-free, but backward-looking); parametric VaR fits a normal distribution (fast, but understates fat tails); Monte Carlo VaR simulates the full 1-year horizon with correlated shocks (forward-looking, but inherits the normality of its shocks). Comparing them is the point — the gaps between them are information.
 
 **Synthetic data is generated honestly.** A two-state Markov chain switches the market between calm and stress regimes; in stress, volatilities scale up, risk-asset correlations tighten toward 1, and treasuries rally — the flight-to-quality pattern real portfolios live with. Shocks are correlated via Cholesky factorisation of regime-specific correlation matrices. The volatility-clustering visible in the rolling-vol chart is emergent from this design, not painted on.
+
+**Backtests don't peek.** Every VaR forecast uses only the 250 days before the day it is judged on (a test enforces this). Kupiec's statistic is chi-squared with one degree of freedom, so its p-value comes from `math.erfc`; still no SciPy.
 
 **Frontier is closed-form.** The minimum-variance frontier comes from the classic matrix algebra (A = 1ᵀΣ⁻¹1, B = 1ᵀΣ⁻¹μ, C = μᵀΣ⁻¹μ), validated against a 20,000-portfolio Dirichlet-sampled long-only cloud.
 
