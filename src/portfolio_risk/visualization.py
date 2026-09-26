@@ -323,3 +323,29 @@ def plot_stress_scenarios(
     ax.legend(ncol=9, loc="upper left", bbox_to_anchor=(0, -0.16), fontsize=9)
     ax.grid(axis="y", visible=False)
     return _save(fig, path)
+
+
+def plot_mc_comparison(models: dict[str, MonteCarloResult], path: str | Path) -> Path:
+    """Year-end value distributions under each shock model, with 95% VaR marked."""
+    _apply_style()
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+    styles = {"normal": (PORTFOLIO_COLOR, "-"), "student_t": (RED, "--"),
+              "bootstrap": (ACCENT, "-.")}
+    names = {"normal": "Normal", "student_t": "Student-t", "bootstrap": "Block bootstrap"}
+    all_values = np.concatenate([m.terminal_values for m in models.values()])
+    bins = np.linspace(*np.percentile(all_values, [0.2, 99.8]), 90)
+    for key, mc in models.items():
+        color, style = styles.get(key, ("grey", "-"))
+        ax.hist(mc.terminal_values, bins=bins, histtype="step", lw=1.8, color=color,
+                ls=style, label=f"{names.get(key, key)}: VaR {_dollars(mc.var_amount)}, "
+                                f"P(loss) {mc.prob_loss:.0%}")
+        ax.axvline(mc.initial_value - mc.var_amount, color=color, ls=style, lw=1.2, alpha=0.8)
+    first = next(iter(models.values()))
+    ax.axvline(first.initial_value, color="black", lw=1, alpha=0.6)
+    ax.xaxis.set_major_formatter(FuncFormatter(_dollars))
+    ax.set_title(f"Monte Carlo: year-end value of {_dollars(first.initial_value)} "
+                 "under three shock models")
+    ax.set_xlabel("Portfolio value after 1 year (vertical lines: 5th percentile)")
+    ax.set_ylabel("Simulations")
+    ax.legend(loc="upper right", fontsize=9.5)
+    return _save(fig, path)
