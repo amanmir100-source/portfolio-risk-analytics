@@ -209,6 +209,8 @@ def main() -> None:
     top_weights = frontier.max_sharpe_weights[frontier.max_sharpe_weights > 0.01]
     print(f"  Max-Sharpe (long-only) : "
           f"{{{', '.join(f'{t}: {float(v):.0%}' for t, v in top_weights.items())}}}")
+    print(f"    Sharpe {frontier.max_sharpe:.2f} exact vs {frontier.sampled_max_sharpe:.2f} "
+          f"best of 20,000 random (model portfolio {frontier.current_sharpe:.2f})")
 
     print("\n  VaR backtest (Kupiec test, 5% significance):")
     for row in bt.table.itertuples():
