@@ -20,6 +20,7 @@ ANALYTICS_QUERIES = [
     "monthly_performance",
     "drawdown_events",
     "asset_summary",
+    "data_quality",
 ]
 
 
