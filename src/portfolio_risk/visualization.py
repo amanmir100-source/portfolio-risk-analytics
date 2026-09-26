@@ -1,7 +1,7 @@
 """Publication-quality matplotlib charts for the risk report.
 
 Every function takes prepared data plus an output path, saves a 150-dpi PNG
-and returns the path. Styling is centralised in _apply_style() so all eight
+and returns the path. Styling is centralised in _apply_style() so all the
 figures share one visual language.
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.ticker import FuncFormatter, PercentFormatter
 
+from .backtest import BacktestResult
 from .monte_carlo import MonteCarloResult
 from .optimization import FrontierResult
 
@@ -256,4 +257,33 @@ def plot_monthly_heatmap(port_returns: pd.Series, path: str | Path) -> Path:
     ax.set_title("Portfolio monthly returns (%)")
     fig.colorbar(im, ax=ax, shrink=0.8,
                  format=PercentFormatter(xmax=1.0, decimals=0))
+    return _save(fig, path)
+
+
+def plot_var_backtest(bt: BacktestResult, path: str | Path, confidence: float = 0.99) -> Path:
+    """Realised daily returns against rolling 99% VaR forecasts, breaches marked."""
+    _apply_style()
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+    r = bt.returns
+    ax.plot(r.index, r, color="#9aa0a6", lw=0.6, label="Realised daily return")
+    level = round(confidence * 100)
+    # historical breaches as rings, parametric as dots, so a day both models
+    # missed shows as a dot inside a ring
+    for method, color, style, marker in (
+        ("historical", PORTFOLIO_COLOR, "-",
+         dict(s=70, facecolor="none", edgecolor=PORTFOLIO_COLOR, linewidth=1.4)),
+        ("parametric", ACCENT, "--", dict(s=20, color=ACCENT)),
+    ):
+        var = bt.forecasts[f"var_{method}_{level}"]
+        row = bt.table.query("method == @method and confidence == @confidence").iloc[0]
+        ax.plot(var.index, -var, color=color, ls=style, lw=1.5,
+                label=f"{method.capitalize()} {level}% VaR: {row['actual_breaches']} breaches "
+                      f"(expected {row['expected_breaches']:.0f}, Kupiec p = {row['p_value']:.2f})")
+        breaches = r[r < -var]
+        ax.scatter(breaches.index, breaches, zorder=3, **marker)
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+    ax.set_title(f"VaR backtest: {level}% forecasts from the previous {bt.window} days "
+                 "vs what happened")
+    ax.set_ylabel("Daily return")
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.08), fontsize=9.5)
     return _save(fig, path)
