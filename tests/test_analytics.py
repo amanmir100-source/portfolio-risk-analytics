@@ -110,3 +110,9 @@ def test_exact_max_sharpe_beats_every_random_portfolio(returns):
     fr = efficient_frontier_analysis(returns, WEIGHTS, n_portfolios=5000, seed=8)
     assert fr.max_sharpe >= fr.cloud["sharpe"].max() - 1e-12
     assert fr.max_sharpe >= fr.sampled_max_sharpe
+
+
+def test_sharpe_is_the_same_in_the_summary_and_on_the_frontier(returns):
+    summary = metrics.summary_table(returns, WEIGHTS)
+    fr = efficient_frontier_analysis(returns, WEIGHTS, n_portfolios=500, seed=1)
+    assert summary.loc["PORTFOLIO", "sharpe"] == pytest.approx(fr.current_sharpe)

@@ -3,7 +3,10 @@
 Conventions
 -----------
 * Returns are daily simple returns.
-* Annualisation uses 252 trading days; annualised return is geometric.
+* Annualisation uses 252 trading days. Annualised return (and Calmar) is
+  geometric - what an investor actually compounded. Sharpe and Sortino use
+  the arithmetic mean x 252, the textbook definition and the same input the
+  Markowitz frontier uses, so every Sharpe in the project agrees.
 * VaR / CVaR are reported as POSITIVE numbers representing a loss at the
   given confidence level (e.g. var = 0.018 -> "we expect to lose more than
   1.8% on the worst 5% of days").
@@ -75,10 +78,15 @@ def annualized_volatility(r: pd.Series) -> float:
     return float(pd.Series(r).dropna().std(ddof=1) * np.sqrt(_ANN))
 
 
+def annualized_mean(r: pd.Series) -> float:
+    """Arithmetic mean daily return x 252 (the Sharpe/Markowitz input)."""
+    return float(pd.Series(r).dropna().mean() * _ANN)
+
+
 def sharpe_ratio(r: pd.Series, risk_free: float = RISK_FREE_RATE) -> float:
-    """(annualised return - rf) / annualised volatility."""
+    """(arithmetic annual mean - rf) / annualised volatility."""
     vol = annualized_volatility(r)
-    return (annualized_return(r) - risk_free) / vol if vol > 0 else np.nan
+    return (annualized_mean(r) - risk_free) / vol if vol > 0 else np.nan
 
 
 def sortino_ratio(r: pd.Series, risk_free: float = RISK_FREE_RATE) -> float:
@@ -87,7 +95,7 @@ def sortino_ratio(r: pd.Series, risk_free: float = RISK_FREE_RATE) -> float:
     target_daily = (1.0 + risk_free) ** (1.0 / _ANN) - 1.0
     downside = np.minimum(r - target_daily, 0.0)
     downside_dev = float(np.sqrt(np.mean(downside**2)) * np.sqrt(_ANN))
-    return (annualized_return(r) - risk_free) / downside_dev if downside_dev > 0 else np.nan
+    return (annualized_mean(r) - risk_free) / downside_dev if downside_dev > 0 else np.nan
 
 
 def drawdown_series(r: pd.Series) -> pd.Series:
