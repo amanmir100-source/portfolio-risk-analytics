@@ -23,6 +23,12 @@ ANALYTICS_QUERIES = [
     "data_quality",
 ]
 
+# Rolling volatility is a long chain of float sums, so different SQLite
+# builds disagree in the last digit or two. Rounding in Python (SQLite's own
+# ROUND() isn't consistent across versions either) keeps the CSV identical on
+# every machine.
+ROUND_DECIMALS = {"rolling_volatility": 10}
+
 
 def get_connection(db_path: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
@@ -80,6 +86,8 @@ def run_all_analytics(
     results: dict[str, pd.DataFrame] = {}
     for name in ANALYTICS_QUERIES:
         results[name] = run_query_file(db_path, name, sql_dir)
+        if name in ROUND_DECIMALS:
+            results[name] = results[name].round(ROUND_DECIMALS[name])
         if out_dir is not None:
             out = Path(out_dir)
             out.mkdir(parents=True, exist_ok=True)
