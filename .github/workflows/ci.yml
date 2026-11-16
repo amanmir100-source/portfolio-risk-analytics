@@ -21,13 +21,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package
+      - name: Install pinned dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -r requirements-lock.txt
+          pip install --no-deps -e .
 
-      - name: Run unit tests
-        run: pytest -v
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type check (mypy)
+        run: mypy
+
+      - name: Unit tests with coverage (fails under 90%)
+        run: pytest -v --cov
 
       - name: Smoke-run full pipeline (demo data)
         run: python run_analysis.py --regenerate --sims 2000
+
+      - name: Regenerated demo dataset matches the committed file
+        run: git diff --exit-code -- data/demo_prices.csv

@@ -130,3 +130,51 @@ def test_foreign_keys_reject_unknown_tickers(db):
                 "INSERT INTO prices (date, ticker, close, volume) "
                 "VALUES ('2026-01-01', 'FAKE', 100.0, 1)"
             )
+
+
+def test_sql_asset_volatility_matches_pandas_sample_stdev(db):
+    db_path, prices = db
+    summary = database.run_query_file(db_path, "asset_summary").set_index("ticker")
+    returns = metrics.daily_returns(metrics.to_wide(prices))
+    for ticker in returns.columns:
+        expected = returns[ticker].std(ddof=1) * np.sqrt(252) * 100
+        assert summary.loc[ticker, "ann_volatility_pct"] == pytest.approx(expected, abs=0.006)
+
+
+def test_connection_is_closed_after_use(db):
+    db_path, _ = db
+    with database.get_connection(db_path) as conn:
+        conn.execute("SELECT 1")
+    with pytest.raises(sqlite3.ProgrammingError):
+        conn.execute("SELECT 1")
+
+
+def test_every_load_is_recorded_with_a_content_hash(tmp_path):
+    prices, _ = generate_market_data(n_days=30, seed=2)
+    db_path = tmp_path / "audit.db"
+    for _ in range(2):
+        database.initialize_database(db_path, prices, assets_frame(), weights_frame(),
+                                     source="unit test")
+    log = database.run_query(db_path, "SELECT * FROM load_log ORDER BY load_id")
+    assert len(log) == 2  # the audit trail survives a reload; prices do not double up
+    assert database.table_row_counts(db_path)["prices"] == len(prices)
+    last = log.iloc[-1]
+    assert last["source"] == "unit test"
+    assert last["row_count"] == len(prices)
+    assert (last["first_date"], last["last_date"]) == (prices["date"].min(), prices["date"].max())
+    assert last["content_sha256"] == database.content_hash(prices)
+    shuffled = prices.sample(frac=1.0, random_state=0)
+    assert database.content_hash(shuffled) == database.content_hash(prices)
+
+
+def test_failed_load_leaves_the_previous_data_in_place(tmp_path):
+    good, _ = generate_market_data(n_days=30, seed=2)
+    db_path = tmp_path / "atomic.db"
+    database.initialize_database(db_path, good, assets_frame(), weights_frame())
+    bad = good.copy()
+    bad.loc[bad.index[-1], "close"] = -1.0  # violates CHECK (close > 0)
+    with pytest.raises(sqlite3.IntegrityError):
+        database.initialize_database(db_path, bad, assets_frame(), weights_frame())
+    counts = database.table_row_counts(db_path)
+    assert counts["prices"] == len(good)
+    assert counts["load_log"] == 1

@@ -6,7 +6,9 @@ and crisis-correlation effects all show up in the analytics.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -56,7 +58,38 @@ assert abs(sum(PORTFOLIO_WEIGHTS.values()) - 1.0) < 1e-12, "weights must sum to 
 
 BENCHMARK_TICKER = "SPY"
 TRADING_DAYS_PER_YEAR = 252
-RISK_FREE_RATE = 0.02  # annualised, used for Sharpe / Sortino / frontier
+# Annualised risk-free rate for Sharpe / Sortino / the frontier.
+# This fixed value is the assumption built into the SYNTHETIC demo data only.
+# Real-data runs (--live) replace it with the average 3-month T-bill yield
+# over the analysis window (live_data.fetch_risk_free_rate): a 2% hurdle
+# would flatter the Sharpe ratio in years when cash paid 4-5%.
+RISK_FREE_RATE = 0.02
+
+
+def load_portfolio(path: str | Path) -> dict[str, float]:
+    """Read portfolio weights from a JSON file and validate them.
+
+    The file holds {"name": ..., "weights": {ticker: weight}}. Weights must be
+    for known tickers, non-negative, and sum to 1; anything else raises
+    ValueError so a typo can't quietly produce a different portfolio.
+    """
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    weights = raw.get("weights") if isinstance(raw, dict) else None
+    if not isinstance(weights, dict) or not weights:
+        raise ValueError(f"{path}: expected a JSON object with a non-empty 'weights' map")
+    unknown = sorted(set(weights) - set(ASSETS))
+    if unknown:
+        raise ValueError(f"{path}: unknown tickers {unknown}; known: {TICKERS}")
+    try:
+        parsed = {ticker: float(w) for ticker, w in weights.items()}
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path}: weights must be numbers") from exc
+    if any(w < 0 for w in parsed.values()):
+        raise ValueError(f"{path}: weights must be non-negative (long-only)")
+    total = sum(parsed.values())
+    if abs(total - 1.0) > 1e-6:
+        raise ValueError(f"{path}: weights sum to {total:.6f}, expected 1")
+    return parsed
 
 # --- Regime-switching parameters for the synthetic generator ----------------
 # Two-state Markov chain: calm <-> stress.

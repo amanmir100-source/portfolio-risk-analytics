@@ -1,0 +1,4 @@
+portfolio,ann_return,ann_volatility,sharpe,max_drawdown,var_95_daily,cvar_95_daily,equity_weight,equity_vol_share,largest_risk_source,largest_vol_share
+current,0.1056,0.1281,0.6918,-0.2072,0.0116,0.0153,0.55,0.8115,SPY,0.3369
+qqq_to_credit,0.098,0.1193,0.676,-0.1903,0.0109,0.0142,0.5,0.7578,SPY,0.3556
+qqq_to_gold,0.0984,0.1188,0.6814,-0.1867,0.0111,0.0141,0.5,0.7564,SPY,0.3548

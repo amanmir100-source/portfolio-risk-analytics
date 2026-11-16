@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from statistics import NormalDist
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -270,11 +271,12 @@ def plot_var_backtest(bt: BacktestResult, path: str | Path, confidence: float = 
     level = round(confidence * 100)
     # historical breaches as rings, parametric as dots, so a day both models
     # missed shows as a dot inside a ring
-    for method, color, style, marker in (
+    lines: tuple[tuple[str, str, str, dict[str, Any]], ...] = (
         ("historical", PORTFOLIO_COLOR, "-",
          dict(s=70, facecolor="none", edgecolor=PORTFOLIO_COLOR, linewidth=1.4)),
         ("parametric", ACCENT, "--", dict(s=20, color=ACCENT)),
-    ):
+    )
+    for method, color, style, marker in lines:
         var = bt.forecasts[f"var_{method}_{level}"]
         row = bt.table.query("method == @method and confidence == @confidence").iloc[0]
         ax.plot(var.index, -var, color=color, ls=style, lw=1.5,
@@ -312,8 +314,9 @@ def plot_stress_scenarios(
         left_pos += np.maximum(vals, 0)
     totals = scenarios.loc[names, "portfolio_return"].to_numpy()
     ax.scatter(totals, y, marker="D", color="black", s=45, zorder=4, label="Portfolio")
-    for yi, total in zip(y, totals):
-        ax.annotate(f"{total:.1%}", (total, yi), xytext=(0, 14), textcoords="offset points",
+    for yi, total in zip(y, totals, strict=True):
+        ax.annotate(f"{total:.1%}", (float(total), float(yi)), xytext=(0, 14),
+                    textcoords="offset points",
                     ha="center", fontsize=10.5, fontweight="bold")
     labels = [f"{n}\n{scenarios.loc[n, 'start']} to {scenarios.loc[n, 'end']}" for n in names]
     ax.set_yticks(y, labels)
@@ -334,7 +337,8 @@ def plot_mc_comparison(models: dict[str, MonteCarloResult], path: str | Path) ->
               "bootstrap": (ACCENT, "-.")}
     names = {"normal": "Normal", "student_t": "Student-t", "bootstrap": "Block bootstrap"}
     all_values = np.concatenate([m.terminal_values for m in models.values()])
-    bins = np.linspace(*np.percentile(all_values, [0.2, 99.8]), 90)
+    low, high = np.percentile(all_values, [0.2, 99.8])
+    bins = np.linspace(float(low), float(high), 90).tolist()
     for key, mc in models.items():
         color, style = styles.get(key, ("grey", "-"))
         ax.hist(mc.terminal_values, bins=bins, histtype="step", lw=1.8, color=color,

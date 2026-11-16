@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import pytest
 
 from portfolio_risk import metrics

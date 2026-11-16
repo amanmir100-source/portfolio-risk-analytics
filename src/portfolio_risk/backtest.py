@@ -1,10 +1,17 @@
-"""Out-of-sample VaR backtest with Kupiec's proportion-of-failures test.
+"""Out-of-sample VaR backtest: Kupiec coverage + Christoffersen independence.
 
 Each day's VaR forecast uses only the previous `window` days. A breach is a
-day whose return falls below -VaR. Kupiec's test checks whether the number of
-breaches is plausible for the confidence level (at 99% over ~1,000 days we
-expect ~10). The statistic is chi-squared(1), so the p-value is
-erfc(sqrt(LR / 2)) from the standard library - no SciPy.
+day whose return falls below -VaR. Two questions are tested:
+
+* Coverage (Kupiec POF): is the NUMBER of breaches plausible for the
+  confidence level? At 99% over ~1,000 days we expect ~10.
+* Independence (Christoffersen): do breaches arrive one at a time, or in
+  clusters? A model can have the right count and still fail here, which is
+  what happens when volatility jumps and the VaR is slow to catch up.
+
+Both statistics are chi-squared(1), so each p-value is erfc(sqrt(LR / 2)).
+Their sum is the conditional-coverage statistic, chi-squared(2), whose
+p-value is exp(-LR / 2). All from the standard library - no SciPy.
 """
 from __future__ import annotations
 
@@ -12,6 +19,7 @@ import math
 from dataclasses import dataclass
 from statistics import NormalDist
 
+import numpy as np
 import pandas as pd
 
 DEFAULT_WINDOW = 250  # one trading year, as in Basel
@@ -65,6 +73,39 @@ def kupiec_pof(n_obs: int, n_breaches: int, confidence: float) -> tuple[float, f
     return lr, math.erfc(math.sqrt(lr / 2.0))
 
 
+def christoffersen_independence(breaches) -> tuple[float, float]:
+    """Christoffersen's independence test. Returns (LR statistic, p-value).
+
+    Compares a first-order Markov model, where the chance of a breach depends
+    on whether yesterday was one, against a model where it does not. A low
+    p-value means breaches cluster. With no breaches at all, or no pair of
+    consecutive days to compare, there is no evidence of clustering: (0, 1).
+    """
+    b = np.asarray(breaches, dtype=bool)
+    if b.size < 2 or not b.any():
+        return 0.0, 1.0
+    prev, cur = b[:-1], b[1:]
+    n00 = int((~prev & ~cur).sum())
+    n01 = int((~prev & cur).sum())
+    n10 = int((prev & ~cur).sum())
+    n11 = int((prev & cur).sum())
+    after_calm, after_breach = n00 + n01, n10 + n11
+    pooled = (n01 + n11) / (after_calm + after_breach)
+    ll_independent = _log_likelihood(after_calm + after_breach, n01 + n11, pooled)
+    ll_markov = 0.0
+    if after_calm:
+        ll_markov += _log_likelihood(after_calm, n01, n01 / after_calm)
+    if after_breach:
+        ll_markov += _log_likelihood(after_breach, n11, n11 / after_breach)
+    lr = max(-2.0 * (ll_independent - ll_markov), 0.0)
+    return lr, math.erfc(math.sqrt(lr / 2.0))
+
+
+def conditional_coverage_p_value(lr_coverage: float, lr_independence: float) -> float:
+    """p-value of the joint test (right count AND no clustering), chi-squared(2)."""
+    return math.exp(-(lr_coverage + lr_independence) / 2.0)
+
+
 @dataclass
 class BacktestResult:
     returns: pd.Series
@@ -88,8 +129,10 @@ def backtest_var(
             var = rolling_var_forecasts(r, window, conf, method)
             realised = r.loc[var.index]
             n_obs = len(var)
-            n_breaches = int((realised < -var).sum())
+            breaches = (realised < -var).to_numpy()
+            n_breaches = int(breaches.sum())
             lr, p_value = kupiec_pof(n_obs, n_breaches, conf)
+            lr_ind, p_ind = christoffersen_independence(breaches)
             forecasts[var.name] = var
             rows.append({
                 "method": method,
@@ -101,6 +144,10 @@ def backtest_var(
                 "kupiec_lr": lr,
                 "p_value": p_value,
                 "result": "pass" if p_value >= significance else "reject",
+                "independence_lr": lr_ind,
+                "independence_p": p_ind,
+                "independence_result": "pass" if p_ind >= significance else "reject",
+                "conditional_coverage_p": conditional_coverage_p_value(lr, lr_ind),
             })
     frame = pd.DataFrame(forecasts)
     return BacktestResult(

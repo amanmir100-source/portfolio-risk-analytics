@@ -25,8 +25,10 @@ stats AS (
         MIN(first_close)                    AS first_close,
         MIN(last_close)                     AS last_close,
         AVG(r)                              AS avg_daily_return,
-        -- population stddev is fine at n ~ 1250; SQRT/MAX guard rounding noise
-        SQRT(MAX(AVG(r * r) - AVG(r) * AVG(r), 0.0)) * SQRT(252.0) AS ann_volatility,
+        -- sample (Bessel-corrected) stdev, the same definition the Python
+        -- engine uses; MAX guards against rounding noise below zero
+        SQRT(MAX(AVG(r * r) - AVG(r) * AVG(r), 0.0) * COUNT(r) / (COUNT(r) - 1.0))
+            * SQRT(252.0)                   AS ann_volatility,
         MIN(r)                              AS worst_day,
         MAX(r)                              AS best_day,
         CAST(AVG(volume) AS INTEGER)        AS avg_volume

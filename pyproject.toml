@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 live = ["yfinance>=0.2"]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.6", "mypy>=1.10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -26,3 +26,27 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = ["error::ResourceWarning"]
+
+[tool.coverage.run]
+source = ["portfolio_risk"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/portfolio_risk/config.py" = ["E501"]  # one asset per line reads better than wrapping
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/portfolio_risk"]
+ignore_missing_imports = true

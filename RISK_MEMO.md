@@ -16,7 +16,7 @@ The portfolio's risk is mostly US large-cap equity risk. SPY and QQQ are 40% of 
 | Average loss on the worst 5% of days (CVaR) | 1.82% |
 | 1-year VaR, 95% (Monte Carlo) | $12,700 per $100k; 28% chance of losing money over a year |
 
-The VaR numbers can be trusted: out of sample over 1,002 days, the 99% historical VaR was breached 10 times against 10 expected. The normal-distribution version was breached 13 times, so treat parametric VaR as slightly optimistic in the tail.
+The VaR numbers held up out of sample: over 1,002 days, the 99% historical VaR was breached 10 times against 10 expected. The normal-distribution version was breached 13 times, so treat parametric VaR as slightly optimistic in the tail. Breaches do cluster (four in a few days in April 2025); a test for clustering does not reject the model, but it is the closest call (p = 0.08), so expect losses beyond VaR to arrive in runs when volatility jumps.
 
 ## What drives it
 
@@ -34,6 +34,6 @@ The portfolio fell 26.3% from its December 2021 peak to 14 October 2022 and took
 
 ## Recommendation
 
-**Review the QQQ position size.** It adds 23% of the risk for 15% of the capital, and with a 0.95 correlation to SPY it adds little diversification. Next step: re-run the risk-contribution and stress analysis on two or three candidate weightings and compare volatility, tail loss and the 2022 replay before changing anything.
+**Review the QQQ position size.** It adds 23% of the risk for 15% of the capital, and with a 0.95 correlation to SPY it adds little diversification. Next step: compare two or three candidate weightings on volatility, tail loss and the 2022 replay before changing anything. The pipeline does this with `--compare`; two candidates that move 5 points from QQQ to credit or gold are in [`portfolios/`](portfolios/).
 
 *Caveats:* five years of history, one of which (2022) dominates the tail; results for a model portfolio built for a portfolio project; not investment advice.
