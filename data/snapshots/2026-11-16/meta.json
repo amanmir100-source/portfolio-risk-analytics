@@ -1,0 +1,27 @@
+{
+  "as_of": "2026-11-16",
+  "source": "live market data (yfinance, adjusted closes)",
+  "risk_free_rate": 0.038557912354954926,
+  "tickers": [
+    "EFA",
+    "GLD",
+    "IWM",
+    "LQD",
+    "QQQ",
+    "SPY",
+    "TLT",
+    "VNQ"
+  ],
+  "prices": {
+    "rows": 10040,
+    "first_date": "2021-11-15",
+    "last_date": "2026-11-13",
+    "content_sha256": "f4a08fc7cb394fb3801e75b2ef53eeb097f7125077564c4b27984d7e53943beb"
+  },
+  "history": {
+    "rows": 39992,
+    "first_date": "2007-01-03",
+    "last_date": "2026-11-13",
+    "content_sha256": "2e8d223d1bbc6546d3cc97bf2a9b466a93038f9c053b7b7adffbf1b5f559cdcf"
+  }
+}

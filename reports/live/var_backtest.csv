@@ -1,5 +1,5 @@
 method,confidence,test_days,expected_breaches,actual_breaches,breach_rate,kupiec_lr,p_value,result,independence_lr,independence_p,independence_result,conditional_coverage_p
-historical,0.95,1002,50.1,46,0.0459,0.3627,0.547,pass,1.4983,0.2209,pass,0.3944
-historical,0.99,1002,10.0,10,0.01,0.0,0.9949,pass,2.9767,0.0845,pass,0.2257
-parametric,0.95,1002,50.1,44,0.0439,0.8138,0.367,pass,0.5578,0.4552,pass,0.5037
-parametric,0.99,1002,10.0,13,0.013,0.8185,0.3656,pass,2.0062,0.1567,pass,0.2436
+historical,0.95,1004,50.2,45,0.0448,0.5866,0.4437,pass,1.6974,0.1926,pass,0.3192
+historical,0.99,1004,10.0,11,0.011,0.0899,0.7643,pass,2.6181,0.1056,pass,0.2582
+parametric,0.95,1004,50.2,43,0.0428,1.1401,0.2856,pass,0.6758,0.411,pass,0.4033
+parametric,0.99,1004,10.0,14,0.0139,1.4052,0.2358,pass,1.7524,0.1856,pass,0.2062

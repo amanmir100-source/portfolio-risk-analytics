@@ -44,8 +44,9 @@ def save_snapshot(
     """Write one snapshot under root/<as_of>/ and return that directory."""
     out = Path(root) / as_of
     out.mkdir(parents=True, exist_ok=True)
-    prices[PRICE_COLUMNS].to_csv(out / "prices.csv", index=False)
-    history[PRICE_COLUMNS].to_csv(out / "history.csv", index=False)
+    # fixed "\n" line endings, so the files are byte-identical on every OS
+    prices[PRICE_COLUMNS].to_csv(out / "prices.csv", index=False, lineterminator="\n")
+    history[PRICE_COLUMNS].to_csv(out / "history.csv", index=False, lineterminator="\n")
     meta = {
         "as_of": as_of,
         "source": source,
@@ -54,7 +55,8 @@ def save_snapshot(
         "prices": _describe(prices),
         "history": _describe(history),
     }
-    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8",
+                                   newline="\n")
     return out
 
 

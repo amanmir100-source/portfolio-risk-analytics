@@ -54,9 +54,14 @@ def get_connection(db_path: str | Path) -> Iterator[sqlite3.Connection]:
 
 
 def content_hash(prices: pd.DataFrame) -> str:
-    """SHA-256 of the price rows in a fixed order, to fingerprint a load."""
+    """SHA-256 of the price rows in a fixed order, to fingerprint a load.
+
+    The line ending is fixed to "\n": pandas otherwise uses the operating
+    system's, which would give the same data a different hash on Windows.
+    """
     ordered = prices.sort_values(["ticker", "date"])[["date", "ticker", "close", "volume"]]
-    return hashlib.sha256(ordered.to_csv(index=False).encode("utf-8")).hexdigest()
+    text = ordered.to_csv(index=False, lineterminator="\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def read_sql_file(name: str, sql_dir: str | Path | None = None) -> str:

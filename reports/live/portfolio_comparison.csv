@@ -1,0 +1,4 @@
+portfolio,ann_return,ann_volatility,sharpe,max_drawdown,var_95_daily,cvar_95_daily,equity_weight,equity_vol_share,largest_risk_source,largest_vol_share,stress: 2008 financial crisis,stress: COVID crash,stress: 2022 rate shock
+current,0.0668,0.1309,0.2649,-0.2627,0.0129,0.0184,0.55,0.7221,SPY,0.3052,-0.3193,-0.2152,-0.2576
+qqq_to_credit,0.0599,0.1237,0.2205,-0.2566,0.0122,0.0173,0.5,0.6659,SPY,0.3149,-0.2969,-0.2074,-0.251
+qqq_to_gold,0.0687,0.1249,0.2852,-0.2504,0.0123,0.0175,0.5,0.654,SPY,0.3085,-0.2815,-0.2031,-0.2441
