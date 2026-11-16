@@ -39,3 +39,9 @@ def test_stress_regime_is_more_volatile():
     assert regime_flags.sum() >= 30, "need enough stress days for a stable estimate"
     spy = returns["SPY"].to_numpy()
     assert spy[regime_flags == 1].std() > 1.5 * spy[regime_flags == 0].std()
+
+
+def test_default_dataset_ends_on_the_pinned_date():
+    from portfolio_risk.data_generator import DEFAULT_END_DATE
+    prices, _ = generate_market_data(n_days=50)
+    assert prices["date"].max() == DEFAULT_END_DATE

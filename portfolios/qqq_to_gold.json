@@ -1,0 +1,14 @@
+{
+  "name": "qqq_to_gold",
+  "description": "Candidate: cut QQQ from 15% to 10% and move the 5 points to gold (GLD).",
+  "weights": {
+    "SPY": 0.25,
+    "QQQ": 0.1,
+    "IWM": 0.05,
+    "EFA": 0.1,
+    "TLT": 0.15,
+    "LQD": 0.1,
+    "GLD": 0.15,
+    "VNQ": 0.1
+  }
+}

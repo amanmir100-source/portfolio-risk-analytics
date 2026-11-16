@@ -21,16 +21,20 @@ flowchart LR
     B --> C["SQL analytics<br/>window functions, CTEs,<br/>rolling vol, drawdown episodes"]
     C --> D["Risk engine<br/>NumPy/pandas<br/>VaR · CVaR · Sharpe · beta<br/>risk contributions"]
     D --> E["Simulation<br/>10k-path Monte Carlo<br/>efficient frontier"]
-    E --> G["Validation<br/>VaR backtest (Kupiec)<br/>historical stress tests"]
+    E --> G["Validation<br/>VaR backtest (Kupiec,<br/>Christoffersen)<br/>historical stress tests"]
     G --> F["Report<br/>12 matplotlib figures<br/>+ CSV outputs"]
 ```
 
 The pipeline is data-source agnostic: it ships with a reproducible synthetic dataset (so it runs anywhere, instantly) and switches to **live market data** with one flag:
 
 ```bash
-python run_analysis.py            # bundled demo dataset (seeded, reproducible)
-python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ history back to 2007 for stress tests)
+python run_analysis.py                       # bundled demo dataset (seeded, reproducible)
+python run_analysis.py --live                # real 5y adjusted closes via yfinance (+ history back to 2007 for stress tests)
+python run_analysis.py --snapshot data/snapshots/<date>   # re-run a saved live pull, offline
+python run_analysis.py --compare portfolios/qqq_to_credit.json portfolios/qqq_to_gold.json
 ```
+
+Every `--live` run saves a dated snapshot (prices, long history, the risk-free rate, and a content hash). Yahoo restates adjusted closes after each dividend, so without a snapshot the same command gives slightly different numbers a month later; with one, a real-data run can be repeated exactly.
 
 ## Skills demonstrated
 
@@ -40,10 +44,10 @@ python run_analysis.py --live     # real 5y adjusted closes via yfinance (+ hist
 | **Python / NumPy** | [`src/portfolio_risk/`](src/portfolio_risk/) | Vectorised simulation (Cholesky-correlated returns, regime-switching Markov chain), closed-form matrix optimisation, exact long-only max-Sharpe by subset enumeration, dataclasses, type hints |
 | **pandas** | [`metrics.py`](src/portfolio_risk/metrics.py) | Time-series transforms, rolling statistics, pivot/long-format reshaping, groupwise analytics |
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Euler and CVaR risk contributions, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
-| **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's test, historical stress scenarios (2008, COVID, 2022) |
+| **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's coverage test and Christoffersen's independence test, historical stress scenarios (2008, COVID, 2022) |
 | **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
-| **Testing** | [`tests/`](tests/) | 63 pytest cases; every SQL query is cross-validated against an independent pandas implementation |
-| **Engineering** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI on Python 3.10/3.12, packaging via `pyproject.toml`, one-command reproducibility |
+| **Testing** | [`tests/`](tests/) | 97 pytest cases at 99% line coverage; every SQL query is cross-validated against an independent pandas implementation; the live loader is tested against a stand-in for yfinance |
+| **Engineering** | [`pipeline.py`](src/portfolio_risk/pipeline.py), [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | One function per pipeline stage, logging, transactional database reload with a load audit table, dated data snapshots, pinned dependencies; CI on Python 3.10/3.12 runs ruff, mypy and the tests with a 90% coverage floor |
 
 ## Key results: real market data
 
@@ -53,12 +57,14 @@ Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 tradi
 |---|---|
 | Annualised return | **7.9%** |
 | Annualised volatility | **13.0%** (vs 17.5% weighted average of holdings: diversification saves ~4.5 pts) |
-| Sharpe / Sortino | **0.50 / 0.72** |
+| Sharpe / Sortino (at a flat 2% risk-free rate, see note) | **0.50 / 0.72** |
 | Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together; back to the old peak on 27 Mar 2024) |
 | Daily VaR / CVaR (95%) | **1.28% / 1.82%** |
 | Daily VaR (99%): historical vs parametric | **2.08% vs 1.87%** |
 | 1-year Monte Carlo VaR (95%, $100k) | **$12,713** |
 | P(loss) over 1 year | **28.0%** |
+
+**Note on the risk-free rate.** The Sharpe, Sortino and max-Sharpe figures in this section come from the 25 Sep 2026 pull, which used a flat 2% risk-free rate. The pipeline now uses the average 3-month T-bill yield over the window for real data, which was higher than 2% for most of this period, so these three figures will come down on the next `--live` run. Nothing else in the section depends on the risk-free rate.
 
 **Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
 
@@ -103,16 +109,16 @@ Barely any difference. The daily returns are fat-tailed, but over 252 days most 
 
 ### Does the VaR hold up? Backtest
 
-Each day's VaR is forecast from the previous 250 days only, then compared with what actually happened (1,002 test days). Kupiec's test checks whether the number of breaches is plausible.
+Each day's VaR is forecast from the previous 250 days only, then compared with what actually happened (1,002 test days). Two tests, because a model can fail in two ways: Kupiec's test asks whether the *number* of breaches is plausible, and Christoffersen's test asks whether breaches arrive independently or in *clusters*.
 
-| Model | Breaches | Expected | Kupiec p-value | Result |
-|---|---|---|---|---|
-| Historical 95% | 46 | 50.1 | 0.55 | pass |
-| Historical 99% | 10 | 10.0 | 0.99 | pass |
-| Parametric 95% | 44 | 50.1 | 0.37 | pass |
-| Parametric 99% | 13 | 10.0 | 0.37 | pass |
+| Model | Breaches | Expected | Coverage p (Kupiec) | Clustering p (Christoffersen) | Result at 5% |
+|---|---|---|---|---|---|
+| Historical 95% | 46 | 50.1 | 0.55 | 0.22 | pass |
+| Historical 99% | 10 | 10.0 | 0.99 | 0.08 | pass |
+| Parametric 95% | 44 | 50.1 | 0.37 | 0.46 | pass |
+| Parametric 99% | 13 | 10.0 | 0.37 | 0.16 | pass |
 
-Both models pass. The normal-curve model misses more often at 99% (13 vs 10), in the direction the fat tails suggest, but not by enough to be significant over four years. The misses also bunch up: four of them came within a few days of each other in April 2025.
+Neither model is rejected on either test. The normal-curve model misses more often at 99% (13 vs 10), in the direction the fat tails suggest, but not by enough to be significant over four years. The misses do bunch up (four came within a few days of each other in April 2025), and the clustering test is where the 99% historical model comes closest to failing (p = 0.08). Passing means the data does not reject the model; with about ten breaches at 99%, these tests have limited power.
 
 ### Stress scenarios
 
@@ -141,6 +147,16 @@ The default run uses a seeded synthetic dataset, so the pipeline runs anywhere, 
 | P(loss) over 1 year | **21.7%** |
 
 Full per-asset table: [`reports/summary_metrics.csv`](reports/summary_metrics.csv) · SQL query outputs: [`reports/sql/`](reports/sql/)
+
+**Comparing candidate weightings.** The risk memo recommends testing alternatives before changing anything. `--compare` puts any number of candidate portfolios (JSON files in [`portfolios/`](portfolios/)) next to the current one. On the synthetic demo data, cutting QQQ from 15% to 10%:
+
+| Portfolio | Return | Volatility | Sharpe | Max drawdown | Daily CVaR (95%) | Equity share of volatility |
+|---|---|---|---|---|---|---|
+| Current | 10.6% | 12.8% | 0.69 | −20.7% | 1.53% | 81% |
+| 5 pts QQQ → LQD | 9.8% | 11.9% | 0.68 | −19.0% | 1.42% | 76% |
+| 5 pts QQQ → GLD | 9.8% | 11.9% | 0.68 | −18.7% | 1.41% | 76% |
+
+In this synthetic sample both candidates cut volatility and tail loss by roughly 7%, at the cost of a lower return (9.8% vs 10.6%), leaving Sharpe almost unchanged. That is an illustration of the tool, not a finding about real markets; on a real-data run the table also includes each historical stress replay. Output: [`reports/portfolio_comparison.csv`](reports/portfolio_comparison.csv)
 
 ## The SQL layer
 
@@ -171,7 +187,7 @@ WHERE n_obs = 21;
 
 [`drawdown_events.sql`](sql/drawdown_events.sql) is the other one worth a look: it groups days into drawdown episodes (a gaps-and-islands problem, where a running count of new highs becomes the episode ID) and finds each one's peak, trough and recovery.
 
-Every query is unit-tested against an independent pandas implementation of the same statistic ([`tests/test_database.py`](tests/test_database.py)), so the SQL is provably correct, not just plausible.
+Every query is unit-tested against an independent pandas implementation of the same statistic ([`tests/test_database.py`](tests/test_database.py)), so each result is checked by a second method rather than only looking plausible.
 
 ## Gallery
 
@@ -195,32 +211,38 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 63 tests
+pytest                           # 97 tests
 ```
+
+For the exact versions CI uses: `pip install -r requirements-lock.txt && pip install --no-deps -e .`, then `ruff check .`, `mypy` and `pytest --cov`.
 
 Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough.ipynb`](notebooks/portfolio_risk_walkthrough.ipynb).
 
 ## Project structure
 
 ```
-├── run_analysis.py              # CLI entry point (demo / --live / --regenerate)
+├── run_analysis.py              # CLI entry point (demo / --live / --snapshot / --compare)
 ├── sql/                         # schema + 6 queries: analytics + a data-quality check
+├── portfolios/                  # weight files: the model portfolio and candidates
 ├── src/portfolio_risk/
-│   ├── config.py                # asset universe, weights, regime parameters
+│   ├── pipeline.py              # the run itself, one function per stage
+│   ├── config.py                # asset universe, weights, regime parameters, portfolio files
 │   ├── data_generator.py        # regime-switching correlated GBM (NumPy)
-│   ├── live_data.py             # optional yfinance loader (same schema)
-│   ├── database.py              # SQLite loading + query runner
+│   ├── live_data.py             # optional yfinance loader (same schema) + T-bill rate
+│   ├── snapshot.py              # dated, hash-checked copies of a live pull
+│   ├── database.py              # transactional SQLite reload, load audit, query runner
 │   ├── data_quality.py          # checks on load: duplicates, gaps, bad ticks, stale prices
 │   ├── metrics.py               # Sharpe, Sortino, VaR/CVaR, beta, drawdowns
 │   ├── monte_carlo.py           # 10k-path simulation: normal, Student-t, bootstrap
 │   ├── optimization.py          # closed-form frontier + exact long-only max-Sharpe
 │   ├── risk_contribution.py     # which assets drive volatility and tail loss
-│   ├── backtest.py              # rolling VaR backtest + Kupiec test
+│   ├── backtest.py              # rolling VaR backtest + Kupiec and Christoffersen tests
 │   ├── stress.py                # historical crisis replay
+│   ├── compare.py               # candidate portfolios side by side
 │   └── visualization.py         # 12 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 63 pytest cases incl. SQL <-> pandas cross-checks
-├── data/                        # demo dataset (CSV); portfolio.db is rebuilt on run
+├── tests/                       # 97 pytest cases incl. SQL <-> pandas cross-checks
+├── data/                        # demo dataset (CSV), live snapshots; the .db files are rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```
 
@@ -230,7 +252,11 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 
 **Synthetic data is generated honestly.** A two-state Markov chain switches the market between calm and stress regimes; in stress, volatilities scale up, risk-asset correlations tighten toward 1, and treasuries rally — the flight-to-quality pattern real portfolios live with. Shocks are correlated via Cholesky factorisation of regime-specific correlation matrices. The volatility-clustering visible in the rolling-vol chart is emergent from this design, not painted on.
 
-**Backtests don't peek.** Every VaR forecast uses only the 250 days before the day it is judged on (a test enforces this). Kupiec's statistic is chi-squared with one degree of freedom, so its p-value comes from `math.erfc`; still no SciPy.
+**Backtests don't peek.** Every VaR forecast uses only the 250 days before the day it is judged on (a test enforces this). Kupiec's and Christoffersen's statistics are each chi-squared with one degree of freedom, so their p-values come from `math.erfc`; still no SciPy.
+
+**The risk-free rate is measured, not assumed, on real data.** Sharpe compares return with what cash paid. A real-data run uses the average 3-month T-bill yield (`^IRX`) over the analysis window; because the mean of (return − cash rate) equals mean return minus the average cash rate, one window average is the right hurdle for a whole-period Sharpe. The synthetic demo keeps a fixed 2%, which is simply a parameter of the made-up data. `--risk-free` overrides either.
+
+**The database is reloaded in full, on purpose.** Adjusted closes are restated backwards after every dividend, so appending only new dates would join prices adjusted on different days and create a false jump at the seam. Each run therefore replaces the price table inside one transaction (a failed load leaves the previous data in place) and records the load in a `load_log` table with its source, date range, row count and content hash.
 
 **Frontier is closed-form.** The minimum-variance frontier comes from the classic matrix algebra (A = 1ᵀΣ⁻¹1, B = 1ᵀΣ⁻¹μ, C = μᵀΣ⁻¹μ), validated against a 20,000-portfolio Dirichlet-sampled long-only cloud. The long-only max-Sharpe point is solved exactly: on any set of assets the best portfolio is the tangency portfolio Σ⁻¹(μ − r<sub>f</sub>), so the optimum is the best of the 255 asset subsets whose tangency weights are all positive. No SciPy; for hundreds of assets you'd switch to a QP solver.
 

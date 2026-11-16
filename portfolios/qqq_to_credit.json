@@ -1,0 +1,14 @@
+{
+  "name": "qqq_to_credit",
+  "description": "Candidate: cut QQQ from 15% to 10% and move the 5 points to investment-grade credit (LQD).",
+  "weights": {
+    "SPY": 0.25,
+    "QQQ": 0.1,
+    "IWM": 0.05,
+    "EFA": 0.1,
+    "TLT": 0.15,
+    "LQD": 0.15,
+    "GLD": 0.1,
+    "VNQ": 0.1
+  }
+}

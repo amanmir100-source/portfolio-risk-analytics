@@ -56,12 +56,15 @@ def simulate_regimes(n_days: int, rng: np.random.Generator) -> np.ndarray:
 
 
 DEFAULT_SEED = 40  # produces a realistic 5y sample: growth + one -25% correction
+# Last date of the committed demo dataset. Pinned so that --regenerate rebuilds
+# data/demo_prices.csv byte for byte instead of sliding the dates to "today".
+DEFAULT_END_DATE = "2026-07-03"
 
 
 def generate_market_data(
     n_days: int = 1260,
     seed: int = DEFAULT_SEED,
-    end_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp = DEFAULT_END_DATE,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Generate the synthetic dataset.
 
@@ -76,8 +79,6 @@ def generate_market_data(
     n_assets = len(tickers)
     dt = 1.0 / config.TRADING_DAYS_PER_YEAR
 
-    if end_date is None:
-        end_date = pd.Timestamp.today().normalize() - pd.tseries.offsets.BDay(1)
     dates = pd.bdate_range(end=end_date, periods=n_days)
 
     specs = [config.ASSETS[t] for t in tickers]
@@ -132,11 +133,10 @@ def assets_frame() -> pd.DataFrame:
     )
 
 
-def weights_frame() -> pd.DataFrame:
+def weights_frame(weights: dict[str, float] | None = None) -> pd.DataFrame:
     """Portfolio weights for the `portfolio_weights` SQL table."""
-    return pd.DataFrame(
-        list(config.PORTFOLIO_WEIGHTS.items()), columns=["ticker", "weight"]
-    )
+    weights = config.PORTFOLIO_WEIGHTS if weights is None else weights
+    return pd.DataFrame(list(weights.items()), columns=["ticker", "weight"])
 
 
 def generate_and_save(

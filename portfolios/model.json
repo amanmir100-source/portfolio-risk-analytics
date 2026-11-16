@@ -1,0 +1,14 @@
+{
+  "name": "model",
+  "description": "Baseline 'moderate growth' allocation analysed throughout the project.",
+  "weights": {
+    "SPY": 0.25,
+    "QQQ": 0.15,
+    "IWM": 0.05,
+    "EFA": 0.1,
+    "TLT": 0.15,
+    "LQD": 0.1,
+    "GLD": 0.1,
+    "VNQ": 0.1
+  }
+}

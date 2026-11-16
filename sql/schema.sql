@@ -24,3 +24,15 @@ CREATE TABLE IF NOT EXISTS prices (
 -- Covering index for the per-ticker time-series scans used by every
 -- window-function query.
 CREATE INDEX IF NOT EXISTS idx_prices_ticker_date ON prices (ticker, date);
+
+-- One row per load, so every number in a report can be traced back to the
+-- exact data that produced it (source, date range, row count, content hash).
+CREATE TABLE IF NOT EXISTS load_log (
+    load_id        INTEGER PRIMARY KEY,
+    loaded_at      TEXT NOT NULL,                  -- UTC, ISO-8601
+    source         TEXT NOT NULL,
+    row_count      INTEGER NOT NULL CHECK (row_count > 0),
+    first_date     TEXT NOT NULL,
+    last_date      TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL
+);

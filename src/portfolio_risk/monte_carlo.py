@@ -91,7 +91,7 @@ def simulate_portfolio(
             asset_returns = bootstrap_days(history, size, horizon_days, block_size, rng)
         else:
             z = rng.standard_normal((size, horizon_days, len(mu)))
-            if method == "student_t":
+            if dof is not None:  # method == "student_t"
                 z = z * t_scale(rng_scale, dof, (size, horizon_days, 1))
             asset_returns = z @ chol.T + mu      # correlated daily returns
         port_returns = asset_returns @ w_vec     # fixed-weight aggregation
