@@ -25,12 +25,21 @@
   candidate portfolios compared side by side.
 - A `load_log` table recording each load's source, date range, row count and
   content hash.
-- 34 more tests (97 in total, 99% line coverage), covering the charts, the
+- 35 more tests (98 in total, 99% line coverage), covering the charts, the
   live loader against a stand-in for yfinance, and end-to-end runs.
 
-### Not yet updated
-- The live Sharpe, Sortino and max-Sharpe figures in the README come from the
-  25 Sep 2026 pull at a 2% risk-free rate. They change on the next `--live` run.
+### Fixed
+- Snapshot and load hashes no longer depend on the operating system. They were
+  computed from text with the platform's line endings, so a snapshot taken on
+  Windows was rejected as "changed" when read on Linux or macOS.
+
+### Results
+- Live results refreshed from the 16 Nov 2026 pull (15 Nov 2021 - 13 Nov 2026),
+  saved in `data/snapshots/2026-11-16/`. With the measured risk-free rate of
+  3.86%, the portfolio's Sharpe ratio is 0.26 (it was 0.50 on the September
+  pull at a flat 2%).
+- Added a real-data comparison of two candidate weightings to the README and
+  the risk memo.
 
 ## 1.0.0 - 2026-09-28
 

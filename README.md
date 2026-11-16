@@ -46,39 +46,39 @@ Every `--live` run saves a dated snapshot (prices, long history, the risk-free r
 | **Statistics** | [`metrics.py`](src/portfolio_risk/metrics.py), [`monte_carlo.py`](src/portfolio_risk/monte_carlo.py) | Historical vs parametric vs simulated VaR (normal, Student-t, block bootstrap), expected shortfall, Euler and CVaR risk contributions, Sharpe/Sortino/Calmar, CAPM beta, drawdown analysis |
 | **Risk validation** | [`backtest.py`](src/portfolio_risk/backtest.py), [`stress.py`](src/portfolio_risk/stress.py) | Out-of-sample VaR backtest with Kupiec's coverage test and Christoffersen's independence test, historical stress scenarios (2008, COVID, 2022) |
 | **Data quality** | [`data_quality.py`](src/portfolio_risk/data_quality.py), [`data_quality.sql`](sql/data_quality.sql) | Checks on load: duplicates and bad closes stop the run; missing closes (SQL anti-join, cross-checked in pandas), 25%+ one-day moves and stale prices are flagged |
-| **Testing** | [`tests/`](tests/) | 97 pytest cases at 99% line coverage; every SQL query is cross-validated against an independent pandas implementation; the live loader is tested against a stand-in for yfinance |
+| **Testing** | [`tests/`](tests/) | 98 pytest cases at 99% line coverage; every SQL query is cross-validated against an independent pandas implementation; the live loader is tested against a stand-in for yfinance |
 | **Engineering** | [`pipeline.py`](src/portfolio_risk/pipeline.py), [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | One function per pipeline stage, logging, transactional database reload with a load audit table, dated data snapshots, pinned dependencies; CI on Python 3.10/3.12 runs ruff, mypy and the tests with a 90% coverage floor |
 
 ## Key results: real market data
 
-Yahoo Finance dividend-adjusted closes, 27 Sep 2021 – 24 Sep 2026 (1,252 trading days), pulled 25 Sep 2026. Reproduce with `python run_analysis.py --live`; outputs land in [`reports/live/`](reports/live/). The data-quality check flags one gap in the feed: no close for EFA, LQD and VNQ on 22 Sep 2026, so that date is dropped for every asset before returns are computed ([`reports/live/data_quality.csv`](reports/live/data_quality.csv)).
+Yahoo Finance dividend-adjusted closes, 15 Nov 2021 – 13 Nov 2026 (1,255 trading days), pulled 16 Nov 2026. The exact pull is saved in [`data/snapshots/2026-11-16/`](data/snapshots/2026-11-16/), so `python run_analysis.py --snapshot data/snapshots/2026-11-16` reproduces every number below; `--live` fetches fresh data instead. Outputs land in [`reports/live/`](reports/live/). The data-quality check found no gaps, extreme moves or stale prices in this pull.
 
 | Metric | Portfolio |
 |---|---|
-| Annualised return | **7.9%** |
-| Annualised volatility | **13.0%** (vs 17.5% weighted average of holdings: diversification saves ~4.5 pts) |
-| Sharpe / Sortino (at a flat 2% risk-free rate, see note) | **0.50 / 0.72** |
+| Annualised return | **6.7%** |
+| Annualised volatility | **13.1%** (vs 17.7% weighted average of holdings: diversification saves ~4.6 pts) |
+| Sharpe / Sortino | **0.26 / 0.38** (risk-free rate 3.86%, the average 3-month T-bill yield over the window) |
 | Max drawdown | **−26.3%** (trough 14 Oct 2022, in the rate-hike sell-off when stocks and bonds fell together; back to the old peak on 27 Mar 2024) |
-| Daily VaR / CVaR (95%) | **1.28% / 1.82%** |
-| Daily VaR (99%): historical vs parametric | **2.08% vs 1.87%** |
-| 1-year Monte Carlo VaR (95%, $100k) | **$12,713** |
-| P(loss) over 1 year | **28.0%** |
+| Daily VaR / CVaR (95%) | **1.29% / 1.84%** |
+| Daily VaR (99%): historical vs parametric | **2.13% vs 1.89%** |
+| 1-year Monte Carlo VaR (95%, $100k) | **$13,861** |
+| P(loss) over 1 year | **31.0%** |
 
-**Note on the risk-free rate.** The Sharpe, Sortino and max-Sharpe figures in this section come from the 25 Sep 2026 pull, which used a flat 2% risk-free rate. The pipeline now uses the average 3-month T-bill yield over the window for real data, which was higher than 2% for most of this period, so these three figures will come down on the next `--live` run. Nothing else in the section depends on the risk-free rate.
+**The risk-free rate matters here.** Cash paid 3.86% a year on average over this window. Against that hurdle the portfolio's Sharpe ratio is 0.26; against a flat 2% assumption the same returns would have scored about 0.41. Using the measured rate is the honest comparison: the portfolio beat cash by under 3 points a year for 13% volatility.
 
-**Fat tails, measured.** Historical and parametric VaR agree at 95% (1.28% vs 1.31%) but split at 99% (2.08% vs 1.87%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
+**Fat tails, measured.** Historical and parametric VaR agree at 95% (1.29% vs 1.33%) but split at 99% (2.13% vs 1.89%). The portfolio's daily returns have an excess kurtosis of 6, a tail the normal curve doesn't see, which is why the project reports VaR more than one way.
 
 **Where the risk comes from.** Each asset's share of portfolio volatility (Euler split) and of the loss on the worst 5% of days (CVaR split); both add up to 100%:
 
 | Asset | Weight | Share of volatility | Share of tail loss |
 |---|---|---|---|
 | SPY | 25% | **31%** | **31%** |
-| QQQ | 15% | **23%** | **23%** |
+| QQQ | 15% | **23%** | **24%** |
 | VNQ | 10% | 11% | 12% |
 | EFA | 10% | 11% | 10% |
 | IWM | 5% | 7% | 7% |
 | TLT | 15% | 7% | 7% |
-| GLD | 10% | 5% | 6% |
+| GLD | 10% | 6% | 6% |
 | LQD | 10% | 4% | 4% |
 
 Stocks are 55% of the money but about 72% of the risk. The bond and gold sleeves (35% of the weight) carry about 17%, and TLT still adds a little risk rather than offsetting it.
@@ -91,7 +91,7 @@ Stocks are 55% of the money but about 72% of the risk. The bond and gold sleeves
 | 18 Feb 2025 | 8 Apr 2025 | **−11.7%** | 16 May 2025 (62 trading days) |
 | 25 Feb 2026 | 27 Mar 2026 | **−7.8%** | 17 Apr 2026 (36 trading days) |
 
-**Max-Sharpe portfolio (long-only, exact):** GLD 58%, SPY 42%, Sharpe 1.08 (the best of 20,000 random portfolios reached 1.04). That is what the last five years rewarded, not a recommendation: gold returned 19% a year over the window, and Markowitz puts the most money wherever history looked best.
+**Max-Sharpe portfolio (long-only, exact):** GLD 56%, SPY 44%, Sharpe 0.75 against 0.26 for the model portfolio (the best of 20,000 random portfolios reached 0.72). That is what the last five years rewarded, not a recommendation: gold returned 15% a year over the window, and Markowitz puts the most money wherever history looked best.
 
 Full per-asset table: [`reports/live/summary_metrics.csv`](reports/live/summary_metrics.csv) · SQL query outputs: [`reports/live/sql/`](reports/live/sql/)
 
@@ -101,24 +101,24 @@ The Monte Carlo draws normal shocks by default. Two fat-tailed alternatives test
 
 | Shock model | 1-year VaR (95%, $100k) | 1-year CVaR (95%) | P(loss) |
 |---|---|---|---|
-| Normal | $12,713 | $17,309 | 28.0% |
-| Student-t | $12,600 | $17,151 | 27.7% |
-| Block bootstrap | $12,584 | $17,529 | 27.0% |
+| Normal | $13,861 | $18,425 | 31.0% |
+| Student-t | $13,516 | $18,374 | 31.3% |
+| Block bootstrap | $13,843 | $18,699 | 29.3% |
 
 Barely any difference. The daily returns are fat-tailed, but over 252 days most of that averages out, so at a one-year horizon the normal model holds up. Fat tails matter far more over days than over a year, which is what the daily VaR comparison and the backtest are for.
 
 ### Does the VaR hold up? Backtest
 
-Each day's VaR is forecast from the previous 250 days only, then compared with what actually happened (1,002 test days). Two tests, because a model can fail in two ways: Kupiec's test asks whether the *number* of breaches is plausible, and Christoffersen's test asks whether breaches arrive independently or in *clusters*.
+Each day's VaR is forecast from the previous 250 days only, then compared with what actually happened (1,004 test days). Two tests, because a model can fail in two ways: Kupiec's test asks whether the *number* of breaches is plausible, and Christoffersen's test asks whether breaches arrive independently or in *clusters*.
 
 | Model | Breaches | Expected | Coverage p (Kupiec) | Clustering p (Christoffersen) | Result at 5% |
 |---|---|---|---|---|---|
-| Historical 95% | 46 | 50.1 | 0.55 | 0.22 | pass |
-| Historical 99% | 10 | 10.0 | 0.99 | 0.08 | pass |
-| Parametric 95% | 44 | 50.1 | 0.37 | 0.46 | pass |
-| Parametric 99% | 13 | 10.0 | 0.37 | 0.16 | pass |
+| Historical 95% | 45 | 50.2 | 0.44 | 0.19 | pass |
+| Historical 99% | 11 | 10.0 | 0.76 | 0.11 | pass |
+| Parametric 95% | 43 | 50.2 | 0.29 | 0.41 | pass |
+| Parametric 99% | 14 | 10.0 | 0.24 | 0.19 | pass |
 
-Neither model is rejected on either test. The normal-curve model misses more often at 99% (13 vs 10), in the direction the fat tails suggest, but not by enough to be significant over four years. The misses do bunch up (four came within a few days of each other in April 2025), and the clustering test is where the 99% historical model comes closest to failing (p = 0.08). Passing means the data does not reject the model; with about ten breaches at 99%, these tests have limited power.
+Neither model is rejected on either test. The normal-curve model misses more often at 99% (14 vs 10), in the direction the fat tails suggest, but not by enough to be significant over four years. The misses do bunch up: at 95%, five breaches fell between 3 and 10 April 2025, and three of the eleven 99% historical breaches fell on 3, 4 and 10 April. The clustering test is where the 99% historical model comes closest to failing (p = 0.11). Passing means the data does not reject the model; with about ten breaches at 99%, these tests have limited power.
 
 ### Stress scenarios
 
@@ -131,6 +131,18 @@ Today's weights replayed through past crises, S&P 500 peak to trough, held with 
 | 2022 rate shock | 3 Jan – 12 Oct 2022 | **−25.8%** |
 
 2022 was nearly as bad as 2008 for this portfolio even though stocks fell about half as far. In 2008 long Treasuries (+25%) and gold (+24%) offset part of the loss; in 2022 Treasuries fell 29% alongside stocks. Details: [`reports/live/stress_scenarios.csv`](reports/live/stress_scenarios.csv)
+
+### Would trimming QQQ help? Candidate weightings
+
+The risk memo recommends reviewing the QQQ position. `--compare` tests two candidates that each move 5 points out of QQQ, on the same real data and the same crisis replays:
+
+| Portfolio | Return | Volatility | Sharpe | Daily CVaR (95%) | Equity share of volatility | 2008 replay | 2022 replay |
+|---|---|---|---|---|---|---|---|
+| Current | 6.7% | 13.1% | 0.26 | 1.84% | 72% | −31.9% | −25.8% |
+| 5 pts QQQ → LQD (credit) | 6.0% | 12.4% | 0.22 | 1.73% | 67% | −29.7% | −25.1% |
+| 5 pts QQQ → GLD (gold) | 6.9% | 12.5% | 0.29 | 1.75% | 65% | −28.2% | −24.4% |
+
+Both candidates lower volatility, tail loss and every crisis replay. The credit swap pays for that with return, so its Sharpe falls. The gold swap improved return as well, but that rests on gold's 15% a year over this window and should not be expected to repeat; the risk reduction is the more dependable part of the result. Output: [`reports/live/portfolio_comparison.csv`](reports/live/portfolio_comparison.csv)
 
 ### Demo dataset (synthetic, reproducible)
 
@@ -148,7 +160,7 @@ The default run uses a seeded synthetic dataset, so the pipeline runs anywhere, 
 
 Full per-asset table: [`reports/summary_metrics.csv`](reports/summary_metrics.csv) · SQL query outputs: [`reports/sql/`](reports/sql/)
 
-**Comparing candidate weightings.** The risk memo recommends testing alternatives before changing anything. `--compare` puts any number of candidate portfolios (JSON files in [`portfolios/`](portfolios/)) next to the current one. On the synthetic demo data, cutting QQQ from 15% to 10%:
+**Comparing candidate weightings.** The risk memo recommends testing alternatives before changing anything. `--compare` puts any number of candidate portfolios (JSON files in [`portfolios/`](portfolios/)) next to the current one. The real-data version is above. On the synthetic demo data, cutting QQQ from 15% to 10%:
 
 | Portfolio | Return | Volatility | Sharpe | Max drawdown | Daily CVaR (95%) | Equity share of volatility |
 |---|---|---|---|---|---|---|
@@ -211,7 +223,7 @@ cd portfolio-risk-analytics
 pip install -r requirements.txt
 
 python run_analysis.py           # full pipeline: DB -> SQL -> metrics -> charts (~10s)
-pytest                           # 97 tests
+pytest                           # 98 tests
 ```
 
 For the exact versions CI uses: `pip install -r requirements-lock.txt && pip install --no-deps -e .`, then `ruff check .`, `mypy` and `pytest --cov`.
@@ -241,7 +253,7 @@ Or walk through the analysis narrative in [`notebooks/portfolio_risk_walkthrough
 │   ├── compare.py               # candidate portfolios side by side
 │   └── visualization.py         # 12 report figures
 ├── notebooks/                   # executed walkthrough notebook
-├── tests/                       # 97 pytest cases incl. SQL <-> pandas cross-checks
+├── tests/                       # 98 pytest cases incl. SQL <-> pandas cross-checks
 ├── data/                        # demo dataset (CSV), live snapshots; the .db files are rebuilt on run
 └── reports/                     # figures + CSV outputs (live/ = real-data run)
 ```

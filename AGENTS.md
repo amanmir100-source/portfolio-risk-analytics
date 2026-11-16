@@ -16,7 +16,7 @@ python run_analysis.py --live      # real market data via yfinance (+ stress tes
 python run_analysis.py --snapshot data/snapshots/<date>   # re-run a saved live pull, offline
 python run_analysis.py --compare portfolios/qqq_to_credit.json portfolios/qqq_to_gold.json
 python run_analysis.py --regenerate --seed 40   # rebuild the demo dataset
-pytest                             # 97 tests, ~25s
+pytest                             # 98 tests, ~25s
 ruff check . && mypy && pytest --cov   # what CI runs (coverage floor 90%)
 ```
 

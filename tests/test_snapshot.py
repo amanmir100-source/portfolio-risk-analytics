@@ -3,6 +3,7 @@ import pytest
 
 from portfolio_risk import snapshot
 from portfolio_risk.data_generator import generate_market_data
+from portfolio_risk.database import content_hash
 
 
 def test_snapshot_round_trip(tmp_path):
@@ -14,6 +15,20 @@ def test_snapshot_round_trip(tmp_path):
     assert (snap.as_of, snap.source, snap.risk_free_rate) == ("2026-11-16", "unit test", 0.041)
     pd.testing.assert_frame_equal(snap.prices, prices.reset_index(drop=True))
     assert len(snap.history) == len(history)
+
+
+def test_hash_and_files_do_not_depend_on_the_operating_system(tmp_path, monkeypatch):
+    # pandas writes os.linesep by default; pretend to be Windows and check
+    # that neither the fingerprint nor the files on disk change
+    prices, _ = generate_market_data(n_days=5, seed=1)
+    expected = content_hash(prices)
+    unix = snapshot.save_snapshot(tmp_path / "unix", "2026-11-16", prices, prices, 0.04, "t")
+    monkeypatch.setattr("os.linesep", "\r\n")
+    assert content_hash(prices) == expected
+    windows = snapshot.save_snapshot(tmp_path / "win", "2026-11-16", prices, prices, 0.04, "t")
+    for name in ("prices.csv", "history.csv", "meta.json"):
+        assert (windows / name).read_bytes() == (unix / name).read_bytes()
+        assert b"\r" not in (windows / name).read_bytes()
 
 
 def test_snapshot_refuses_edited_data(tmp_path):
