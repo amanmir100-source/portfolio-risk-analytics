@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "portfolio-risk-analytics"
-version = "1.0.0"
+version = "1.1.0"
 description = "End-to-end portfolio risk analytics: SQL analytics layer + NumPy/pandas risk engine + matplotlib reporting"
 readme = "README.md"
 authors = [{ name = "Aman Mir" }]
